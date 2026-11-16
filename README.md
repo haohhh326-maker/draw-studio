@@ -1,5 +1,7 @@
 # Draw studio
 
+Windows x64 安装包与版本说明见 [GitHub Releases](https://github.com/haohhh326-maker/draw-studio/releases)。
+
 可运行的无限画布：素材节点 → 节点下方生成面板 → 选择云端 ComfyUI、RunningHub 工作流、RunningHub AI 应用或 Muse → 生成结果保存为画布素材并回写原节点。下文的 ComfyUI 传输与任务目录章节只描述云端 ComfyUI 执行链。
 
 桌面版内置本机服务，按设置连接 ComfyUI、RunningHub、Muse 和 DeepSeek。ComfyUI 的连接设计见 [DIRECT_COMFYUI.md](DIRECT_COMFYUI.md)。完整提示词的已实现和未完成项目见 [REVIEW.md](REVIEW.md)。

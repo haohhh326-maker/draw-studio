@@ -107,9 +107,11 @@ async function checkVideo(page) {
     return blue;
   }, { timeout: 30000, message: "The packaged video poster must show the blue reference frame" }).toBeGreaterThan(100);
   await video.hover();
-  await expect.poll(() => video.evaluate(element => element.videoWidth), { timeout: 30000 }).toBeGreaterThan(0);
-  const metadata = await video.evaluate(element => ({ width: element.videoWidth, height: element.videoHeight, duration: element.duration }));
-  assert(metadata.height > 0 && metadata.duration > 0);
+  let metadata;
+  await expect.poll(async () => {
+    metadata = await video.evaluate(element => ({ width: element.videoWidth, height: element.videoHeight, duration: element.duration }));
+    return metadata.width > 0 && metadata.height > 0 && Number.isFinite(metadata.duration) && metadata.duration > 0;
+  }, { timeout: 30000, message: "The packaged video must load dimensions and duration" }).toBe(true);
   await page.mouse.move(1200, 800);
   return metadata;
 }
