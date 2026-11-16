@@ -1,0 +1,27 @@
+.canvas-bottom-left .software-update-button { gap: 7px; }
+.software-update-layer { position: fixed; inset: 0; z-index: 2100; }
+.software-update-layer .modal { width: min(540px, calc(100vw - 32px)); }
+.software-update-body { padding: 24px 26px 26px; }
+.software-update-versions { display: grid; gap: 12px; margin: 0 0 20px; }
+.software-update-versions > div { display: flex; justify-content: space-between; gap: 20px; }
+.software-update-versions dt { color: var(--muted); }
+.software-update-versions dd { margin: 0; overflow-wrap: anywhere; }
+.software-update-status, .software-update-feedback { color: var(--text); line-height: 1.7; }
+.software-update-notes { margin: 20px 0; max-height: 260px; overflow: auto; }
+.software-update-notes h3 { margin: 0 0 10px; font-size: 14px; }
+.software-update-notes p { color: var(--muted); white-space: pre-wrap; line-height: 1.7; overflow-wrap: anywhere; }
+.software-update-error { color: #f4a6a6; line-height: 1.7; overflow-wrap: anywhere; }
+.software-update-actions { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 24px; }
+.software-update-actions button { min-height: 38px; padding: 9px 13px; gap: 7px; }
+.software-update-progress { margin: 20px 0; }
+.software-update-progress progress { width: 100%; height: 8px; border: 0; border-radius: 8px; overflow: hidden; accent-color: var(--ui-lime); }
+.software-update-progress progress::-webkit-progress-bar { background: var(--surface-input); border-radius: 8px; }
+.software-update-progress progress::-webkit-progress-value { background: var(--ui-lime); border-radius: 8px; transition: width .2s; }
+.software-update-progress > div { display: flex; justify-content: space-between; gap: 12px; margin-top: 9px; font-size: 13px; font-variant-numeric: tabular-nums; }
+.software-update-progress > p { color: var(--muted); font-size: 12px; line-height: 1.7; }
+.software-update-notice { position: fixed; right: 24px; bottom: 24px; z-index: 1900; display: flex; align-items: center; gap: 16px; max-width: calc(100vw - 32px); padding: 15px 16px; border: 1px solid var(--surface-border); border-radius: 14px; background: var(--surface); box-shadow: 0 12px 36px #0006; color: var(--text); }
+.software-update-notice > div { display: flex; align-items: center; gap: 9px; font-size: 14px; }
+.software-update-notice > div svg { color: var(--ui-lime); flex-shrink: 0; }
+.software-update-notice button { padding: 8px 12px; white-space: nowrap; }
+.software-update-notice .software-update-dismiss { padding: 6px; background: transparent; color: var(--muted); }
+@media (max-width: 600px) { .software-update-notice { right: 16px; bottom: 16px; gap: 10px; flex-wrap: wrap; } }

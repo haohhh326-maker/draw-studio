@@ -1,0 +1,376 @@
+{
+  "76": {
+    "class_type": "SaveImage",
+    "inputs": {
+      "filename_prefix": "zimage/zimage",
+      "images": [
+        "78:8",
+        0
+      ]
+    },
+    "_meta": {
+      "title": "SaveImage"
+    }
+  },
+  "79": {
+    "class_type": "Text Multiline",
+    "inputs": {
+      "text": "A realistic beauty portrait, close-up headshot of a woman with freckled fair skin, red hair in a loose messy bun, green eyes, minimal makeup, soft peach blush, natural light reflecting in her eyes, light gray backdrop, warm golden hour lighting, sharp detail on skin pores and fine hairs, medium format camera, eye-level shot."
+    },
+    "_meta": {
+      "title": "Shared Prompt"
+    }
+  },
+  "80:71": {
+    "class_type": "CLIPTextEncode",
+    "inputs": {
+      "text": "",
+      "clip": [
+        "80:11",
+        0
+      ]
+    },
+    "_meta": {
+      "title": "CLIPTextEncode"
+    }
+  },
+  "80:13": {
+    "class_type": "ModelSamplingSD3",
+    "inputs": {
+      "shift": 3,
+      "model": [
+        "80:4",
+        0
+      ]
+    },
+    "_meta": {
+      "title": "ModelSamplingSD3"
+    }
+  },
+  "80:4": {
+    "class_type": "CheckpointLoaderSimple",
+    "inputs": {
+      "ckpt_name": "sd3\\sd3_medium.safetensors"
+    },
+    "_meta": {
+      "title": "CheckpointLoaderSimple"
+    }
+  },
+  "80:135": {
+    "class_type": "EmptySD3LatentImage",
+    "inputs": {
+      "width": 1280,
+      "height": 1280,
+      "batch_size": 1
+    },
+    "_meta": {
+      "title": "EmptySD3LatentImage"
+    }
+  },
+  "80:11": {
+    "class_type": "TripleCLIPLoader",
+    "inputs": {
+      "clip_name1": "clip_g.safetensors",
+      "clip_name2": "clip_l.safetensors",
+      "clip_name3": "t5xxl_fp16.safetensors"
+    },
+    "_meta": {
+      "title": "TripleCLIPLoader"
+    }
+  },
+  "80:68": {
+    "class_type": "ConditioningSetTimestepRange",
+    "inputs": {
+      "start": 0.2,
+      "end": 1,
+      "conditioning": [
+        "80:67",
+        0
+      ]
+    },
+    "_meta": {
+      "title": "ConditioningSetTimestepRange"
+    }
+  },
+  "80:67": {
+    "class_type": "ConditioningZeroOut",
+    "inputs": {
+      "conditioning": [
+        "80:71",
+        0
+      ]
+    },
+    "_meta": {
+      "title": "ConditioningZeroOut"
+    }
+  },
+  "80:69": {
+    "class_type": "ConditioningCombine",
+    "inputs": {
+      "conditioning_1": [
+        "80:68",
+        0
+      ],
+      "conditioning_2": [
+        "80:70",
+        0
+      ]
+    },
+    "_meta": {
+      "title": "ConditioningCombine"
+    }
+  },
+  "80:70": {
+    "class_type": "ConditioningSetTimestepRange",
+    "inputs": {
+      "start": 0,
+      "end": 0.2,
+      "conditioning": [
+        "80:71",
+        0
+      ]
+    },
+    "_meta": {
+      "title": "ConditioningSetTimestepRange"
+    }
+  },
+  "80:6": {
+    "class_type": "CLIPTextEncode",
+    "inputs": {
+      "text": [
+        "79",
+        0
+      ],
+      "clip": [
+        "80:11",
+        0
+      ]
+    },
+    "_meta": {
+      "title": "CLIPTextEncode"
+    }
+  },
+  "80:8": {
+    "class_type": "VAEDecode",
+    "inputs": {
+      "samples": [
+        "80:294",
+        0
+      ],
+      "vae": [
+        "80:4",
+        2
+      ]
+    },
+    "_meta": {
+      "title": "VAEDecode"
+    }
+  },
+  "80:294": {
+    "class_type": "KSampler",
+    "inputs": {
+      "seed": 172911634548025,
+      "steps": 40,
+      "cfg": 5.5,
+      "sampler_name": "dpmpp_2m",
+      "scheduler": "sgm_uniform",
+      "denoise": 1,
+      "model": [
+        "80:13",
+        0
+      ],
+      "positive": [
+        "80:6",
+        0
+      ],
+      "negative": [
+        "80:69",
+        0
+      ],
+      "latent_image": [
+        "80:135",
+        0
+      ]
+    },
+    "_meta": {
+      "title": "KSampler"
+    }
+  },
+  "78:18": {
+    "class_type": "CLIPLoader",
+    "inputs": {
+      "clip_name": "qwen_3_4b.safetensors",
+      "type": "lumina2",
+      "device": "default"
+    },
+    "_meta": {
+      "title": "CLIPLoader"
+    }
+  },
+  "78:6": {
+    "class_type": "CLIPTextEncode",
+    "inputs": {
+      "text": [
+        "79",
+        0
+      ],
+      "clip": [
+        "78:18",
+        0
+      ]
+    },
+    "_meta": {
+      "title": "CLIP Text Encode (Positive Prompt)"
+    }
+  },
+  "78:7": {
+    "class_type": "CLIPTextEncode",
+    "inputs": {
+      "text": "bad hands, extra fingers, missing fingers, fused fingers, broken hands, mutant hands, twisted limbs, extra limbs, missing limbs, dimple ",
+      "clip": [
+        "78:18",
+        0
+      ]
+    },
+    "_meta": {
+      "title": "CLIP Text Encode (Negative Prompt)"
+    }
+  },
+  "78:85": {
+    "class_type": "KSamplerSelect",
+    "inputs": {
+      "sampler_name": "dpmpp_sde"
+    },
+    "_meta": {
+      "title": "KSamplerSelect"
+    }
+  },
+  "78:86": {
+    "class_type": "SamplerCustom",
+    "inputs": {
+      "add_noise": true,
+      "noise_seed": 1000,
+      "cfg": 1,
+      "model": [
+        "78:16",
+        0
+      ],
+      "positive": [
+        "78:6",
+        0
+      ],
+      "negative": [
+        "78:7",
+        0
+      ],
+      "sampler": [
+        "78:85",
+        0
+      ],
+      "sigmas": [
+        "78:82",
+        0
+      ],
+      "latent_image": [
+        "78:94",
+        0
+      ]
+    },
+    "_meta": {
+      "title": "SamplerCustom"
+    }
+  },
+  "78:17": {
+    "class_type": "VAELoader",
+    "inputs": {
+      "vae_name": "flux\\Flux_VAE.safetensors"
+    },
+    "_meta": {
+      "title": "VAELoader"
+    }
+  },
+  "78:8": {
+    "class_type": "VAEDecode",
+    "inputs": {
+      "samples": [
+        "78:86",
+        0
+      ],
+      "vae": [
+        "78:17",
+        0
+      ]
+    },
+    "_meta": {
+      "title": "VAEDecode"
+    }
+  },
+  "78:82": {
+    "class_type": "FlowMatchEulerDiscreteScheduler (Custom)",
+    "inputs": {
+      "steps": 10,
+      "start_at_step": 5,
+      "end_at_step": 10,
+      "base_image_seq_len": 256,
+      "base_shift": 0.5,
+      "invert_sigmas": "disable",
+      "max_image_seq_len": 8192,
+      "max_shift": 1.15,
+      "num_train_timesteps": 1000,
+      "shift": 3,
+      "shift_terminal": 0,
+      "stochastic_sampling": "disable",
+      "time_shift_type": "exponential",
+      "use_beta_sigmas": "disable",
+      "use_dynamic_shifting": "disable",
+      "use_exponential_sigmas": "disable",
+      "use_karras_sigmas": "disable",
+      "device": "cuda"
+    },
+    "_meta": {
+      "title": "FlowMatchEulerDiscreteScheduler (Custom)"
+    }
+  },
+  "78:16": {
+    "class_type": "UNETLoader",
+    "inputs": {
+      "unet_name": "z_image_turbo_bf16.safetensors",
+      "weight_dtype": "default"
+    },
+    "_meta": {
+      "title": "UNETLoader"
+    }
+  },
+  "78:94": {
+    "class_type": "LatentUpscale",
+    "inputs": {
+      "upscale_method": "nearest-exact",
+      "width": 2048,
+      "height": 2048,
+      "crop": "center",
+      "samples": [
+        "78:95",
+        0
+      ]
+    },
+    "_meta": {
+      "title": "LatentUpscale"
+    }
+  },
+  "78:95": {
+    "class_type": "VAEEncode",
+    "inputs": {
+      "pixels": [
+        "80:8",
+        0
+      ],
+      "vae": [
+        "78:17",
+        0
+      ]
+    },
+    "_meta": {
+      "title": "VAEEncode"
+    }
+  }
+}

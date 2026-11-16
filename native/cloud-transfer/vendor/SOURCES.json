@@ -1,0 +1,86 @@
+{
+  "sources": [
+    {
+      "name": "filezilla",
+      "version": "3.71.0",
+      "sourceDirectory": "filezilla-3.71.0",
+      "officialPage": "https://filezilla-project.org/",
+      "archiveFile": ".cache/filezilla-source-research/filezilla-3.71.0.tar.xz",
+      "sha512": "91051b16fb871b2fcf169db908a7a136d90d79b1cb00adfd87d1c52836d52be0014119d4dd206c533f5ec8560f821ce5c00335c2f36ba404ba42bd545a1d87ae",
+      "verifiedAgainstOfficialDigest": false,
+      "licenseFiles": [
+        "filezilla-3.71.0/README",
+        "filezilla-3.71.0/COPYING"
+      ],
+      "localPatches": []
+    },
+    {
+      "name": "fzssh",
+      "version": "1.4.0",
+      "officialPage": "https://fzssh.filezilla-project.org/download.php",
+      "archiveUrl": "https://deb.debian.org/debian/pool/main/f/fzssh/fzssh_1.4.0.orig.tar.xz",
+      "sha512": "51e80e97182d7cca0a8c27f3c33bf17ece35b4d2b69235024a9915cfaf9c49af83a642dd77554c6b2d21b913e9d8889bdbd18859647f560c9473a79555ed932d",
+      "verifiedAgainstOfficialDigest": true,
+      "licenseFiles": [
+        "fzssh-1.4.0-upstream/README",
+        "fzssh-1.4.0-upstream/agpl3.txt"
+      ],
+      "localPatches": [],
+      "sourceDirectory": "fzssh-1.4.0-upstream",
+      "legacyPatchedSource": {
+        "sourceDirectory": "fzssh-1.4.0",
+        "compiledIntoActiveEngine": false,
+        "localPatches": [
+          {
+            "description": "Add a default no-op response_handler::process_names_end callback once per fully parsed READDIR NAME packet, including empty packets and filtered final names, so the bridge can advance without duplicate reads.",
+            "files": [
+              "fzssh-1.4.0/lib/fzssh/sftp/sftp_client.hpp",
+              "fzssh-1.4.0/lib/client/sftp_client.cpp"
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "name": "libfilezilla",
+      "version": "0.57.0",
+      "officialPage": "https://lib.filezilla-project.org/download.php",
+      "archiveUrl": "https://dl2.cdn.filezilla-project.org/libfilezilla/libfilezilla-0.57.0.tar.xz",
+      "sha512": "5cc5d87fa756ae7e74bfb7667653936b5d34fa922c00b492756bf0795afd3747835c6460f804d75121cd26f8fc8965e3dcbd2fefc2a0ca9c4d9180ecd3cf5a51",
+      "verifiedAgainstOfficialDigest": true,
+      "licenseFiles": [
+        "libfilezilla-0.57.0/README",
+        "libfilezilla-0.57.0/COPYING"
+      ]
+    },
+    {
+      "name": "nettle",
+      "version": "3.10.2",
+      "officialPage": "https://www.lysator.liu.se/~nisse/nettle/",
+      "archiveUrl": "https://ftp.gnu.org/gnu/nettle/nettle-3.10.2.tar.gz",
+      "sha512": "bf37ddd7dca8e78488da2a5286dcf16761d527d620572b42f2ad27bb8ee8c12999d92b0272e06f53766e7155a3f4a1ab7ad9c4b1c3caec47c031878b6b1772fb",
+      "verifiedAgainstOfficialDigest": false,
+      "licenseFiles": [
+        "nettle-3.10.2/README",
+        "nettle-3.10.2/COPYING.LESSERv3",
+        "nettle-3.10.2/COPYINGv2",
+        "nettle-3.10.2/COPYINGv3"
+      ]
+    },
+    {
+      "name": "boost-regex",
+      "version": "1.86.0",
+      "sourceDirectory": "boost-regex-1.86.0",
+      "officialPage": "https://www.boost.org/doc/libs/1_86_0/libs/regex/doc/html/boost_regex/install.html",
+      "archiveUrl": "https://codeload.github.com/boostorg/regex/tar.gz/refs/tags/boost-1.86.0",
+      "sha512": "4c52620fd8f754e8053b5c70cab7a274e311751356c90546f7f54d2700d744638ffc0db0e974ae80ef15efc4564ce8c81a98c02604f8e6ed0a7cc9b94e0d8aae",
+      "verifiedAgainstOfficialDigest": false,
+      "licenseFiles": [
+        "../licenses/boost-1.0.txt"
+      ],
+      "localPatches": []
+    }
+  ],
+  "activeEngine": "FileZilla Client 3.71.0 (libfzclient-private)",
+  "integrationSource": "official-bridge.cpp"
+}

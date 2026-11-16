@@ -1,0 +1,13 @@
+{
+  "75": {
+    "inputs": {
+      "filename_prefix": "LTX 2.5_TEST/video",
+      "format": "auto",
+      "codec": "auto"
+    },
+    "class_type": "SaveVideo",
+    "_meta": {
+      "title": "Save Video"
+    }
+  }
+}

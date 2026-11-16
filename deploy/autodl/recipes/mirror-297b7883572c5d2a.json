@@ -1,0 +1,154 @@
+{
+  "804": {
+    "inputs": {
+      "text": [
+        "28:949",
+        0
+      ]
+    },
+    "class_type": "VRGDG_ShowText",
+    "_meta": {
+      "title": "VRGDG_ShowText -Fixed Lyrics"
+    }
+  },
+  "954": {
+    "inputs": {
+      "audio": "",
+      "start_time": 0,
+      "duration": 0
+    },
+    "class_type": "VHS_LoadAudioUpload",
+    "_meta": {
+      "title": "Load Audio (Upload)🎥🅥🅗🅢"
+    }
+  },
+  "960": {
+    "inputs": {
+      "scene_duration_seconds": 4,
+      "fps": 24,
+      "srt_path": [
+        "28:933",
+        0
+      ],
+      "reference_lyrics": "",
+      "strict_reference_text": true,
+      "fill_aggressiveness": 1,
+      "preserve_nonvocal_segments": true,
+      "alignment_min_words": 1,
+      "model_name": "large-v3",
+      "language": "english",
+      "audio": [
+        "28:114",
+        0
+      ]
+    },
+    "class_type": "VRGDG_ManualLyricsExtractor_SRT_Advanced",
+    "_meta": {
+      "title": "Manual Lyrics Extractor (SRT Advanced - stable-ts)"
+    }
+  },
+  "28:934": {
+    "inputs": {
+      "value": ""
+    },
+    "class_type": "PrimitiveString",
+    "_meta": {
+      "title": "String"
+    }
+  },
+  "28:114": {
+    "inputs": {
+      "model_name": "htdemucs_ft",
+      "device": "auto",
+      "audio_file_path": "",
+      "audio": [
+        "954",
+        0
+      ]
+    },
+    "class_type": "VRGDG_GetStems",
+    "_meta": {
+      "title": "VRGDG_GetStems"
+    }
+  },
+  "28:82": {
+    "inputs": {
+      "final_mix": [
+        "954",
+        0
+      ],
+      "drums": [
+        "28:114",
+        1
+      ],
+      "bass": [
+        "28:114",
+        2
+      ],
+      "vocals": [
+        "28:114",
+        0
+      ],
+      "other": [
+        "28:114",
+        3
+      ]
+    },
+    "class_type": "BeatImpactAnalysisNode",
+    "_meta": {
+      "title": "BeatImpactAnalysisNode"
+    }
+  },
+  "28:80": {
+    "inputs": {
+      "beat_data": [
+        "28:82",
+        0
+      ],
+      "min_duration": 4,
+      "max_duration": 10,
+      "bias": 0.7,
+      "duration_preset": "varied_no_repeat",
+      "seed": 9,
+      "output_filename": "filenamegoeshere"
+    },
+    "class_type": "BeatSceneDurationNode",
+    "_meta": {
+      "title": "Beat-Aligned Scene Durations"
+    }
+  },
+  "28:933": {
+    "inputs": {
+      "switch": true,
+      "on_false": [
+        "28:934",
+        0
+      ],
+      "on_true": [
+        "28:80",
+        1
+      ]
+    },
+    "class_type": "ComfySwitchNode",
+    "_meta": {
+      "title": "use SRT duration file"
+    }
+  },
+  "28:949": {
+    "inputs": {
+      "lyrics_text": [
+        "960",
+        0
+      ],
+      "repeat_output_count": 3,
+      "min_repeats_to_collapse": 4,
+      "bridge_single_word_segments": true,
+      "fill_empty_segments": true,
+      "empty_segment_text": "Instrumental section."
+    },
+    "class_type": "VRGDG_LyricSegmentTextCleaner",
+    "_meta": {
+      "title": "VRGDG Lyric Segment Text Cleaner"
+    }
+  }
+}

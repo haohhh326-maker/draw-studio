@@ -1,0 +1,47 @@
+.director-panel { width: 100%; background: #333; color: #ddd; }
+.director-frame { padding: 7px 12px 12px; background: #333; }
+.director-runbar button { display: inline-flex; align-items: center; gap: 6px; background: #242424; color: #ddd; border: 1px solid #161616; border-radius: 4px; padding: 8px 12px; }
+.director-connection { display: flex; align-items: end; gap: 15px; margin-bottom: 12px; font-size: 12px; }
+.director-connection label { display: grid; gap: 5px; }
+.director-connection input { width: 245px; padding: 7px; border: 1px solid #555; border-radius: 4px; background: #171717; color: #eee; }
+.director-connection a { color: #83c1b2; padding-bottom: 7px; }
+.director-upstream { width: 100%; min-height: 0; font-size: 11px; line-height: normal; }
+/* ComfyUI allocates a fixed node viewport. This page has one outer scroll area. */
+.director-upstream > .mmx-host,
+.director-upstream .bd-wrap.bd-batch-fill { min-height: 0 !important; height: auto !important; max-height: none !important; overflow: visible !important; flex: none; }
+.director-upstream .bd-wrap.bd-batch-fill .bd-main,
+.director-upstream .bd-wrap.bd-batch-fill .bd-main > .bd-batch:not(.hidden),
+.director-upstream .bd-wrap.bd-batch-fill .bd-batch-list { flex: none !important; height: auto !important; min-height: 0 !important; max-height: none !important; overflow: visible !important; }
+.director-upstream .bd-wrap.bd-batch-fill .bd-main > .bd-split:not(.hidden) { max-height: none; overflow: visible; }
+/* Restore the original widget's form defaults; the canvas uses column labels. */
+.director-upstream :where(label) { display: inline; flex-direction: row; gap: normal; color: inherit; font-size: inherit; }
+.director-upstream :where(button) { gap: normal; line-height: normal; }
+.director-upstream :where(input),
+.director-upstream :where(textarea),
+.director-upstream :where(select) { line-height: normal; }
+.director-upstream > div { width: 100% !important; box-sizing: border-box; }
+.director-upstream button,.director-upstream input,.director-upstream textarea,.director-upstream select { font-family: inherit; }
+.director-upstream input[type=checkbox] { accent-color: #3bf586; }
+.director-runbar { display: flex; gap: 10px; align-items: center; padding: 8px 0; font-size: 12px; position: sticky; bottom: 0; z-index: 2; background: #333; border-top: 1px solid #444; margin-top: 8px; }
+.director-runbar > span { flex: 1; overflow-wrap: anywhere; }
+.director-run-status { display: flex; flex-direction: column; gap: 3px; min-width: 0; }
+.director-timing { color: #a5b8a8; font-variant-numeric: tabular-nums; font-size: 11px; }
+.director-runbar label { display: flex; align-items: center; gap: 8px; white-space: nowrap; }
+.director-runbar select { background: #1b1b1b; color: #ddd; border: 1px solid #555; border-radius: 4px; padding: 7px 12px; width: 120px; }
+.director-runbar .director-run { color: #64ffa0; border-color: #39db7e; min-width: 82px; justify-content: center; }
+.director-error,.director-run-error { color: #ffb2a6; }
+.director-error { padding: 12px; border: 1px solid #723c34; background: #291b19; border-radius: 5px; margin-bottom: 12px; }
+.director-loading { padding: 25px; color: #aaa; }
+.director-results { display: grid; flex: 0 0 auto; max-height: 35vh; overflow: auto; grid-template-columns: repeat(auto-fit,minmax(300px,1fr)); gap: 12px; margin-top: 15px; }
+.director-results video,.director-results img { display: block; width: 100%; max-height: 600px; object-fit: contain; background: #111; }
+.director-node { position: relative; width: 100%; height: 100%; min-height: 420px; border-radius: 12px; border: 1px solid #595959; background: #333; color: #ddd; }
+.director-node.is-selected { border-color: #d0d0d0; box-shadow: 0 0 0 1px #d0d0d0; }
+.director-node .node-caption { position: absolute; top: -32px; left: 0; right: 0; }
+.director-node .node-caption > span { display: inline-flex; align-items: center; gap: 6px; }
+.director-node .node-caption { cursor: grab; }
+.director-node-delete { display: inline-flex; align-items: center; justify-content: center; width: 25px; height: 25px; margin-left: 5px; padding: 3px; color: #aaa; background: #222; border: 1px solid #505050; border-radius: 5px; cursor: pointer; }
+.director-node-delete:hover { color: #ffb2a6; border-color: #a86960; }
+.director-node:focus { outline: none; }
+.director-node-body { height: 100%; width: 100%; overflow: auto; border-radius: inherit; scrollbar-gutter: stable; }
+.director-inline { --director-ui-scale: .76; zoom: var(--director-ui-scale); width: 100%; }
+.director-node > .react-flow__handle { width: 14px; height: 14px; border: 3px solid #333; background: #bbb; }

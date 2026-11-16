@@ -1,0 +1,54 @@
+{
+  "3": {
+    "class_type": "SaveAudio",
+    "inputs": {
+      "filename_prefix": "audio/ComfyUI",
+      "audio": [
+        "6",
+        0
+      ]
+    },
+    "_meta": {
+      "title": "SaveAudio"
+    }
+  },
+  "4": {
+    "class_type": "VHS_LoadAudioUpload",
+    "inputs": {
+      "audio": "",
+      "start_time": 0,
+      "duration": 30
+    },
+    "_meta": {
+      "title": "VHS_LoadAudioUpload"
+    }
+  },
+  "6": {
+    "class_type": "VRGDG_VoxCPM2Generate",
+    "inputs": {
+      "text": "The wind whispers secrets as I wander, chasing memories that fade before I can hold them still.",
+      "mode": "controllable_clone",
+      "device": "auto",
+      "cfg_value": 2,
+      "inference_timesteps": 10,
+      "load_denoiser": false,
+      "normalize_text": false,
+      "retry_badcase": true,
+      "retry_badcase_max_times": 3,
+      "retry_badcase_ratio_threshold": 6,
+      "min_len": 2,
+      "max_len": 4096,
+      "save_filename_prefix": "voxcpm2",
+      "reference_audio_path": "",
+      "prompt_audio_path": "",
+      "prompt_text": "",
+      "reference_audio": [
+        "4",
+        0
+      ]
+    },
+    "_meta": {
+      "title": "VRGDG_VoxCPM2Generate"
+    }
+  }
+}

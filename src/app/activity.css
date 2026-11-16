@@ -1,0 +1,9 @@
+.history-time-filters { display: flex; flex-wrap: wrap; gap: 8px; margin: 0 0 20px; }
+.history-time-filters button { font-family: var(--font-ui); font-weight: var(--font-weight-medium); line-height: var(--line-height-body); border: 1px solid var(--surface-border); border-radius: 8px; padding: 8px 12px; background: var(--surface-raised); color: var(--text-secondary); font-size: var(--font-size-label); }
+.history-time-filters button[aria-pressed="true"] { border-color: var(--ui-lime); background: var(--surface-selected); color: var(--text); }
+.history-time-filters button:focus-visible { outline: 2px solid var(--ui-lime); outline-offset: 2px; }
+.history-output-select { display: grid; gap: 6px; margin: 12px 0; color: var(--text-secondary); font-size: var(--font-size-label); }
+.history-output-select select { width: 100%; min-width: 0; }
+.runninghub-task-timing { margin-top: 12px; padding-top: 12px; border-top: 1px solid var(--surface-border); }
+.runninghub-task-timing .timing-phase { display: contents; }
+.runninghub-task-timing small { display: block; color: var(--text-secondary); margin: 8px 0; }

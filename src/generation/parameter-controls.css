@@ -1,0 +1,466 @@
+.parameter.parameter-with-action {
+  min-width: 106px;
+  max-width: 164px;
+}
+.generation-panel .prompt {
+  display: block;
+  min-height: 120px;
+  height: 140px;
+  padding: 13px 16px;
+  border: 1px solid var(--surface-border);
+  border-radius: 12px;
+  background: var(--surface-input);
+  color: var(--text);
+  font-family: var(--font-ui);
+  font-size: var(--font-size-body);
+  line-height: var(--line-height-body);
+  transition: border-color 120ms ease, box-shadow 120ms ease;
+}
+.generation-panel .prompt:focus {
+  border-color: var(--ui-lime);
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--ui-lime) 30%, transparent);
+}
+.generation-panel .prompt:disabled {
+  opacity: 0.65;
+}
+.parameter-value-row {
+  display: flex;
+  align-items: center;
+  min-width: 0;
+  gap: 6px;
+}
+.parameter-value-row > input {
+  flex: 1;
+  min-width: 0;
+}
+.parameter-value-row > .parameter-action {
+  flex: 0 0 36px;
+  width: 36px;
+  height: 40px;
+  padding: 7px;
+  display: grid;
+  place-items: center;
+  border: 1px solid var(--surface-border);
+  border-radius: 7px;
+  background: var(--surface-raised);
+  color: var(--text-secondary);
+}
+.parameter-value-row > .parameter-action:hover:not(:disabled) {
+  background: var(--surface-hover);
+  border-color: var(--border-strong);
+  color: var(--text);
+}
+.parameter-value-row > .parameter-action:disabled {
+  opacity: 0.35;
+  cursor: default;
+}
+.parameter .parameter-select-trigger {
+  font-family: var(--font-ui);
+  font-weight: var(--font-weight-medium);
+  line-height: var(--line-height-body);
+  width: 100%;
+  min-height: 40px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 8px 11px;
+  color: var(--text);
+  background: var(--surface-input);
+  border: 1px solid var(--surface-border);
+  border-radius: 7px;
+  font-size: var(--font-size-label);
+  line-height: var(--line-height-body);
+  text-align: left;
+}
+.parameter .parameter-select-trigger > span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.parameter .parameter-select-trigger > svg {
+  flex: 0 0 auto;
+}
+.parameter .parameter-select-trigger[aria-expanded="true"],
+.parameter .parameter-select-trigger:focus-visible {
+  border-color: var(--ui-lime);
+  outline: 1px solid var(--ui-lime);
+}
+.parameter .parameter-select-trigger:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+.parameter-editable-select {
+  display: flex;
+  align-items: stretch;
+  min-width: 0;
+  min-height: 40px;
+  border: 1px solid var(--surface-border);
+  border-radius: 7px;
+  background: var(--surface-input);
+}
+.parameter-editable-select:focus-within {
+  border-color: var(--ui-lime);
+  outline: 1px solid var(--ui-lime);
+}
+.parameter .parameter-editable-select > input {
+  flex: 1;
+  width: 0;
+  min-width: 0;
+  min-height: 0;
+  border: 0;
+  background: transparent;
+  outline: none;
+  box-shadow: none;
+}
+.parameter-editable-select > button {
+  flex: 0 0 30px;
+  display: grid;
+  place-items: center;
+  border: 0;
+  border-radius: 0 6px 6px 0;
+  background: transparent;
+  color: var(--text-secondary);
+  padding: 0;
+}
+.parameter-editable-select > button:hover:not(:disabled) {
+  color: var(--text);
+  background: var(--surface-hover);
+}
+.parameter-select-menu {
+  font-family: var(--font-ui);
+  font-size: var(--font-size-label);
+  line-height: var(--line-height-body);
+  position: fixed;
+  z-index: 2000;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding: 5px;
+  border: 1px solid #4b4e50;
+  border-radius: 12px;
+  background: #27292b;
+  color: var(--text);
+  box-shadow: 0 10px 28px #0008;
+  outline: none;
+}
+.parameter-select-option {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  width: 100%;
+  flex: 0 0 auto;
+  min-height: 40px;
+  padding: 9px 11px;
+  border: 0;
+  border-radius: 5px;
+  background: transparent;
+  color: var(--text);
+  font-size: var(--font-size-label);
+  line-height: var(--line-height-body);
+  text-align: left;
+}
+.parameter-select-option > span {
+  overflow-wrap: anywhere;
+}
+.parameter-select-option > svg {
+  flex: 0 0 auto;
+}
+.parameter-select-option.active,
+.parameter-select-option:hover {
+  background: #36383a;
+  color: var(--text);
+}
+.parameter-select-option[aria-selected="true"] {
+  color: var(--text);
+}
+.parameter-select-option[aria-selected="true"] > svg {
+  color: var(--ui-lime);
+}
+.parameter-select-option:focus-visible {
+  outline: 1px solid var(--ui-lime);
+  outline-offset: -1px;
+}
+.parameter-group .parameter-with-action {
+  max-width: none;
+}
+.generation-clamped > .generation-panel {
+  width: min(1120px, calc(100vw - 96px));
+  max-height: calc(100dvh - 96px);
+  overflow-y: auto;
+}
+.generation-clamped .generation-footer {
+  position: sticky;
+  bottom: -11px;
+  z-index: 1;
+  background: var(--panel);
+}
+.generation-panel .basic-parameters {
+  align-items: flex-end;
+  gap: 12px;
+  flex-wrap: wrap;
+  overflow-x: visible;
+}
+.generation-panel .basic-parameters > .parameter {
+  flex: 0 1 124px;
+  min-width: 100px;
+  max-width: 160px;
+}
+.generation-panel .basic-parameters > .parameter-with-action {
+  flex-basis: 148px;
+  min-width: 140px;
+  max-width: 196px;
+}
+.generation-panel .basic-parameters > .parameter-seed {
+  flex-basis: 180px;
+  min-width: 180px;
+  max-width: 220px;
+}
+.generation-panel .basic-parameters > .parameter-ratio { min-width: 116px; }
+.generation-panel .generation-footer { align-items: flex-end; }
+.generation-panel .generation-footer > .icon-button { width: 40px; height: 40px; flex-shrink: 0; margin-bottom: 3px; }
+.generation-settings-control { flex-shrink: 0; margin-bottom: 3px; }
+.generation-settings-control > .icon-button { width: 40px; height: 40px; }
+.generation-panel .generation-footer > .workflow-control { padding-bottom: 3px; }
+.generation-panel .workflow-control { min-width: 0; max-width: 100%; flex-shrink: 1; }
+.generation-panel .workflow-button { max-width: 100%; align-items: center; }
+.generation-panel .workflow-button > span:nth-child(2) { min-width: 0; }
+.generation-run-controls {
+  display: flex;
+  align-items: flex-end;
+  flex: 0 0 auto;
+  gap: 10px;
+}
+.runninghub-instance-control {
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+  width: 154px;
+  min-width: 0;
+  max-width: none;
+  margin-bottom: 3px;
+  font-family: var(--font-ui);
+}
+.runninghub-instance-control > span {
+  color: var(--muted);
+  font-size: var(--font-size-caption);
+  font-weight: var(--font-weight-medium);
+  line-height: var(--line-height-title);
+}
+.runninghub-instance-control > .parameter-select-trigger {
+  width: 100%;
+  height: 40px;
+  padding: 8px 10px;
+}
+.runninghub-instance-control > .parameter-select-trigger:hover:not(:disabled) {
+  border-color: var(--border-strong);
+  background: var(--surface-hover);
+}
+.runninghub-instance-control > .parameter-select-trigger[aria-expanded="true"],
+.runninghub-instance-control > .parameter-select-trigger:focus-visible {
+  border-color: var(--ui-lime);
+  outline: none;
+}
+.runninghub-instance-control > .parameter-select-trigger:disabled {
+  opacity: 0.55;
+  cursor: default;
+}
+@media (max-width: 1100px) {
+  .generation-clamped > .generation-panel { width: calc(100vw - 32px); }
+  .generation-panel .generation-footer {
+    flex-wrap: wrap;
+  }
+  .generation-panel .basic-parameters {
+    flex-basis: 100%;
+    justify-content: flex-start;
+    order: 3;
+  }
+  .generation-panel .generation-footer > .generate-button {
+    margin-left: auto;
+  }
+  .generation-panel .generation-footer > .generation-run-controls {
+    margin-left: auto;
+  }
+  .generation-panel .generation-footer > .workflow-control { flex: 1 1 200px; }
+}
+.generation-panel .parameter { gap: 7px; font-size: var(--font-size-label); line-height: var(--line-height-body); }
+.generation-panel .parameter > span { font-size: var(--font-size-caption); font-weight: var(--font-weight-medium); line-height: var(--line-height-title); }
+.generation-panel .parameter input, .generation-panel .parameter select { height: 40px; padding: 8px 11px; font-family: var(--font-ui); font-size: var(--font-size-label); line-height: var(--line-height-body); }
+.generation-panel .parameter input[type="checkbox"] { width: 20px; height: 20px; padding: 0; margin: 10px 0; }
+.generation-panel .parameter textarea { font-family: var(--font-ui); font-size: var(--font-size-label); line-height: var(--line-height-body); }
+.generation-panel .parameter-ratio { min-width: 86px; }
+.generation-panel .parameter-empty { color: var(--text-secondary); padding: 4px 0; }
+.generation-panel .lora-settings { flex-direction: column; align-items: stretch; }
+.generation-panel .advanced .parameter-group > div { display: flex; flex-wrap: wrap; gap: 12px; }
+.generation-panel .lora-settings .parameter { flex: 0 1 160px; max-width: 220px; }
+.generation-panel .parameter-group .parameter-lora-model {
+  flex: 1 1 260px;
+  max-width: 100%;
+}
+.generation-panel .lora-model-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 8px;
+  width: 100%;
+}
+.lora-model-toolbar small { color: var(--text-secondary); }
+.lora-model-toolbar button {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 5px 9px;
+  color: var(--text-secondary);
+  background: var(--surface-input);
+  border: 1px solid var(--surface-border);
+  border-radius: 7px;
+  font-family: var(--font-ui);
+  font-size: var(--font-size-micro);
+}
+.lora-model-toolbar button:hover:not(:disabled) { color: var(--text); background: var(--surface-hover); }
+.lora-model-toolbar button:disabled { opacity: .5; }
+.generation-settings-popover {
+  z-index: 1900;
+  width: min(460px, calc(100vw - 32px));
+  max-height: min(440px, calc(100dvh - 32px));
+  padding: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  overflow-x: hidden;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  background: #27292b;
+  border: 1px solid #4b4e50;
+  border-radius: 14px;
+  box-shadow: 0 12px 36px #0008;
+  color: var(--text);
+  font-family: var(--font-ui);
+  font-size: var(--font-size-caption);
+  line-height: var(--line-height-body);
+  outline: none;
+}
+.generation-settings-popover > header { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+.generation-settings-popover:not(:has(.lora-settings)) { width: min(240px, calc(100vw - 32px)); }
+.generation-settings-popover > header strong { font-size: var(--font-size-label); font-weight: var(--font-weight-semibold); }
+.generation-settings-popover > header .icon-button { width: 26px; height: 26px; }
+.generation-settings-popover .lora-model-toolbar { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 6px; }
+.generation-settings-popover .lora-model-toolbar small { font-size: var(--font-size-micro); }
+.generation-settings-popover .lora-model-toolbar button { font-size: var(--font-size-micro); padding: 4px 6px; }
+.generation-settings-popover .parameter-group { padding: 0 0 8px; }
+.generation-settings-popover .parameter-group summary { padding: 6px 0; font-size: var(--font-size-caption); }
+.generation-settings-popover .parameter-group > div { display: flex; flex-wrap: wrap; align-items: flex-end; gap: 8px; padding: 4px 0; }
+.generation-settings-popover .parameter { flex: 0 1 90px; min-width: 0; max-width: 112px; gap: 5px; }
+.generation-settings-popover .parameter > span { font-size: var(--font-size-micro); line-height: var(--line-height-title); }
+.generation-settings-popover .parameter-group .parameter-lora-model { flex: 1 1 210px; max-width: 100%; }
+.generation-settings-popover .parameter input,
+.generation-settings-popover .parameter select,
+.generation-settings-popover .parameter .parameter-select-trigger { width: 100%; height: 34px; min-height: 34px; padding: 6px 8px; font: inherit; font-size: var(--font-size-caption); }
+.generation-settings-popover .parameter-settings-steps { display: flex; flex-wrap: wrap; gap: 8px; }
+.generation-settings-popover .parameter-settings-steps > .parameter { flex: 0 1 100px; width: 100px; }
+.generation-settings-tabs { display: flex; gap: 5px; border-bottom: 1px solid var(--surface-border); padding-bottom: 9px; }
+.generation-settings-tabs > button { display: inline-flex; align-items: center; justify-content: center; gap: 6px; min-height: 32px; padding: 5px 10px; border: 1px solid transparent; border-radius: 7px; background: transparent; color: var(--muted); font: inherit; cursor: pointer; }
+.generation-settings-tabs > button[aria-selected="true"] { background: var(--surface-hover); border-color: var(--surface-border); color: var(--text); }
+.generation-settings-tabs > button > span { font-size: 10px; font-variant-numeric: tabular-nums; color: var(--muted); }
+.generation-settings-popover:has(.workflow-node-settings) { width: min(560px, calc(100vw - 32px)); }
+.workflow-node-settings { display: flex; flex-direction: column; gap: 8px; min-width: 0; }
+.workflow-node-settings > small, .node-parameter-empty { color: var(--muted); font-size: 11px; margin: 0; }
+.node-parameter-search { width: 100%; min-width: 0; box-sizing: border-box; height: 34px; padding: 7px 10px; border: 1px solid var(--border-strong); border-radius: 8px; background: var(--surface-input); color: var(--text); font: inherit; }
+.generation-settings-popover .node-parameter-group { margin: 0; border-bottom: 1px solid var(--surface-border); }
+.generation-settings-popover .node-parameter-group > summary { display: flex; align-items: center; justify-content: space-between; gap: 12px; cursor: pointer; padding: 8px 0; overflow-wrap: anywhere; }
+.node-parameter-group > summary > span { flex: 0 0 auto; color: var(--muted); font-size: 10px; }
+.generation-settings-popover .node-parameter-group > div { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; padding: 8px 0 12px; }
+.generation-settings-popover .workflow-node-settings .parameter { width: 100%; max-width: none; min-width: 0; }
+.generation-settings-popover .workflow-node-settings .parameter:has(textarea), .generation-settings-popover .workflow-node-settings .parameter-lora-model { grid-column: 1 / -1; }
+.generation-settings-popover .workflow-node-settings .parameter > span { overflow-wrap: anywhere; }
+.workflow-node-settings .parameter textarea { width: 100%; min-height: 76px; box-sizing: border-box; padding: 8px; resize: vertical; background: var(--surface-input); border: 1px solid var(--border-strong); border-radius: 8px; color: var(--text); font: inherit; }
+.generation-settings-popover .workflow-node-settings .parameter input[type="checkbox"] { width: 18px; height: 18px; padding: 0; margin: 8px 0; }
+.generation-settings-popover input:focus-visible,
+.generation-settings-popover button:focus-visible { outline: 1px solid var(--ui-lime); outline-offset: 1px; }
+.parameter-select-menu-compact { font-size: var(--font-size-caption); }
+.parameter-select-menu-compact .parameter-select-option { min-height: 34px; padding: 7px 9px; font-size: var(--font-size-caption); }
+
+/* Both providers size to their visible controls. Keep a single compact row;
+   only the parameter strip scrolls when the viewport cannot fit everything. */
+.generation-clamped > .generation-panel {
+  width: min(var(--generation-panel-ideal-width, 1000px), calc(100vw - 32px));
+}
+.generation-clamped > .generation-panel .generation-footer {
+  display: flex;
+  flex-wrap: nowrap;
+  align-items: flex-end;
+  gap: 10px;
+  padding: 12px 0 3px;
+}
+.generation-panel .generation-footer > .workflow-control {
+  flex: 0 1 auto;
+  width: max-content;
+  min-width: 100px;
+  max-width: 260px;
+  align-self: center;
+  padding-bottom: 0;
+}
+.generation-panel .workflow-button { width: 100%; }
+.generation-panel .workflow-button > span:nth-child(2) { flex: 0 1 auto; max-width: none; }
+.generation-panel .workflow-button > .workflow-mark,
+.generation-panel .workflow-button > svg { flex-shrink: 0; }
+.generation-clamped > .generation-panel .basic-parameters {
+  flex: 0 1 auto;
+  margin-left: auto;
+  order: 0;
+  flex-wrap: nowrap;
+  justify-content: flex-start;
+  align-items: flex-end;
+  gap: 8px;
+  overflow-x: auto;
+  padding-bottom: 3px;
+  scrollbar-width: thin;
+}
+.generation-clamped > .generation-panel .basic-parameters > .parameter {
+  flex: 0 0 var(--parameter-width, 84px);
+  min-width: 0;
+  max-width: none;
+  gap: 5px;
+}
+.generation-panel .basic-parameters .parameter > span { font-size: 11px; line-height: 15px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.generation-panel .basic-parameters .parameter textarea { height: 36px; min-height: 36px; resize: none; padding: 7px 6px; font-size: 13px; line-height: 20px; }
+.generation-panel .basic-parameters .parameter input,
+.generation-panel .basic-parameters .parameter select,
+.generation-panel .basic-parameters .parameter .parameter-select-trigger {
+  height: 36px;
+  min-height: 36px;
+  padding: 7px 6px;
+  font-size: 13px;
+  line-height: 20px;
+  font-variant-numeric: tabular-nums;
+}
+.generation-panel .basic-parameters .parameter-value-row { gap: 4px; }
+.generation-panel .basic-parameters .parameter-editable-select { min-height: 36px; }
+.generation-panel .basic-parameters .parameter-action { flex-basis: 28px; width: 28px; height: 36px; padding: 5px; }
+.generation-panel .basic-parameters .parameter-action > svg { width: 17px; height: 17px; }
+.generation-panel .generation-footer-actions {
+  flex: 0 0 auto;
+  display: flex;
+  flex-wrap: nowrap;
+  align-items: flex-end;
+  gap: 8px;
+}
+.generation-panel .generation-settings-control { margin-bottom: 0; }
+.generation-panel .generation-footer-actions .icon-button { width: 36px; height: 36px; flex-shrink: 0; }
+.generation-panel .generation-run-controls { gap: 8px; }
+.generation-panel .runninghub-instance-control { width: 112px; gap: 5px; margin-bottom: 0; }
+.generation-panel .runninghub-instance-control > span { font-size: 11px; line-height: 15px; }
+.generation-panel .runninghub-instance-control > .parameter-select-trigger { height: 36px; min-height: 36px; padding: 7px 9px; font-size: 13px; }
+.generation-panel .generate-button { width: 40px; height: 40px; min-width: 40px; border-radius: 10px; }
+@media (max-width: 700px) {
+  .generation-clamped > .generation-panel .generation-footer { gap: 8px; }
+  .generation-panel .generation-footer > .workflow-control { min-width: 80px; max-width: 180px; }
+  .generation-panel .workflow-button { gap: 6px; }
+  .generation-panel .workflow-button > .workflow-mark { width: 24px; height: 24px; }
+  .generation-panel .runninghub-instance-control { width: 112px; }
+}

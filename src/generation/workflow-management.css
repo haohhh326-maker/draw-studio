@@ -1,0 +1,36 @@
+.workflow-control {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  min-width: 0;
+}
+.workflow-control .workflow-button { min-width: 0; }
+.workflow-control .workflow-button > span:nth-child(2) { min-width: 0; }
+.workflow-settings-menu {
+  font-family: var(--font-ui);
+  font-size: var(--font-size-label);
+  line-height: var(--line-height-body);
+  position: fixed;
+  z-index: 1600;
+  display: grid;
+  gap: 3px;
+  width: min(180px, calc(100vw - 32px));
+  padding: 6px;
+  border: 1px solid var(--surface-border);
+  border-radius: 12px;
+  background: var(--surface-raised);
+  box-shadow: 0 12px 32px #0008;
+}
+.workflow-settings-menu button {
+  font-size: var(--font-size-label);
+  font-weight: var(--font-weight-medium);
+  line-height: var(--line-height-body);
+  justify-content: flex-start;
+  padding: 10px 11px;
+  background: transparent;
+  color: var(--text);
+}
+.workflow-settings-menu button:hover,
+.workflow-settings-menu button:focus-visible { background: var(--surface-hover); }
+.workflow-control .workflow-button strong { font-size: var(--font-size-label); font-weight: var(--font-weight-medium); line-height: var(--line-height-title); }
+.workflow-control .workflow-button small { font-size: var(--font-size-micro); line-height: var(--line-height-title); }

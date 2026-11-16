@@ -1,0 +1,163 @@
+{
+  "model": {
+    "class_type": "UNETLoader",
+    "inputs": {
+      "unet_name": "minimax_music3_dit_fp16.safetensors",
+      "weight_dtype": "default"
+    }
+  },
+  "clip": {
+    "class_type": "CLIPLoader",
+    "inputs": {
+      "clip_name": "minimax_music3_text_encoder_pruned_int8_convrot.safetensors",
+      "type": "minimax",
+      "device": "default"
+    }
+  },
+  "vae": {
+    "class_type": "VAELoader",
+    "inputs": {
+      "vae_name": "minimax_music3_dav.safetensors"
+    }
+  },
+  "lyrics": {
+    "class_type": "VRGDG_Music3LyricsPrepare",
+    "inputs": {
+      "lyrics": "",
+      "normalise_headers": true,
+      "remove_metadata_lines": true
+    }
+  },
+  "tuning": {
+    "class_type": "VRGDG_Music3TuningPreset",
+    "inputs": {
+      "preset": "Balanced Quality"
+    }
+  },
+  "seed": {
+    "class_type": "VRGDG_Music3SeedBank",
+    "inputs": {
+      "base_seed": 58,
+      "spacing": 101
+    }
+  },
+  "encode": {
+    "class_type": "MiniMaxMusic3TextEncode",
+    "inputs": {
+      "clip": [
+        "clip",
+        0
+      ],
+      "caption": "",
+      "lyrics": [
+        "lyrics",
+        0
+      ],
+      "seed": [
+        "seed",
+        0
+      ],
+      "max_duration": 30,
+      "cfg_scale": [
+        "tuning",
+        0
+      ],
+      "top_k": [
+        "tuning",
+        1
+      ]
+    }
+  },
+  "strength": {
+    "class_type": "VRGDG_Music3ConditioningStrength",
+    "inputs": {
+      "conditioning": [
+        "encode",
+        0
+      ],
+      "strength": [
+        "tuning",
+        4
+      ]
+    }
+  },
+  "latent": {
+    "class_type": "EmptyMiniMaxMusic3LatentAudio",
+    "inputs": {
+      "seconds": [
+        "encode",
+        1
+      ],
+      "batch_size": 1
+    }
+  },
+  "negative": {
+    "class_type": "ConditioningZeroOut",
+    "inputs": {
+      "conditioning": [
+        "strength",
+        0
+      ]
+    }
+  },
+  "sampler": {
+    "class_type": "KSampler",
+    "inputs": {
+      "model": [
+        "model",
+        0
+      ],
+      "seed": [
+        "seed",
+        0
+      ],
+      "steps": [
+        "tuning",
+        3
+      ],
+      "cfg": [
+        "tuning",
+        2
+      ],
+      "sampler_name": "euler",
+      "scheduler": "simple",
+      "denoise": 1,
+      "positive": [
+        "strength",
+        0
+      ],
+      "negative": [
+        "negative",
+        0
+      ],
+      "latent_image": [
+        "latent",
+        0
+      ]
+    }
+  },
+  "decode": {
+    "class_type": "VAEDecodeAudio",
+    "inputs": {
+      "samples": [
+        "sampler",
+        0
+      ],
+      "vae": [
+        "vae",
+        0
+      ]
+    }
+  },
+  "save": {
+    "class_type": "SaveAudioMP3",
+    "inputs": {
+      "audio": [
+        "decode",
+        0
+      ],
+      "filename_prefix": "canvas/music3",
+      "quality": "V0"
+    }
+  }
+}

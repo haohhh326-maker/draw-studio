@@ -1,0 +1,35 @@
+.canvas-shell {
+  --canvas-edge-base: #b7bdbe;
+  --canvas-edge-highlight: var(--ui-lime);
+  --canvas-edge-glow: #d7ff0066;
+}
+.canvas-shell .react-flow__edge .canvas-flow-edge-base {
+  stroke: var(--canvas-edge-base);
+  stroke-width: 2;
+  stroke-dasharray: none;
+  animation: none;
+}
+.canvas-shell .react-flow__edge .canvas-flow-edge-highlight {
+  pointer-events: none;
+  stroke: var(--canvas-edge-highlight);
+  stroke-width: 3;
+  stroke-linecap: round;
+  stroke-dasharray: 18 24;
+  filter: drop-shadow(0 0 3px var(--canvas-edge-glow));
+  animation: canvas-edge-toward-target 0.7s linear infinite;
+}
+.canvas-shell .react-flow__edge.selected .canvas-flow-edge-base {
+  stroke: var(--ui-lime) !important;
+}
+.canvas-shell[data-interacting="true"] .canvas-flow-edge-highlight {
+  animation-play-state: paused;
+  filter: none;
+}
+.canvas-shell[data-interacting="true"] .media-video-preview {
+  pointer-events: none;
+}
+/* Negative dash offset moves along the source-to-target path direction. */
+@keyframes canvas-edge-toward-target {
+  from { stroke-dashoffset: 0; }
+  to { stroke-dashoffset: -42; }
+}

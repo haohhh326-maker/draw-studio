@@ -1,0 +1,55 @@
+{
+  "name": "Draw studio",
+  "scope": "running cloud instance frontend",
+  "cloudRoot": "/root/draw-studio",
+  "release": "Draw studio UI 2026.10.03",
+  "deployedAt": "2026-10-03T10:40:11.849347+00:00",
+  "features": [
+    "scrolling canvas add button",
+    "88px desktop header",
+    "16px horizontal scrollbar",
+    "unclipped active canvas outline",
+    "deeper canvas tab colors",
+    "capsule action toolbar",
+    "responsive header"
+  ],
+  "frontendSha256": "c4fbae3bb6212b4e9b8e1a27cce358d7e7a03fa226eeb4b70bf50421f4b42e56",
+  "archiveSha256": "314a246ee4a0f1d38510b077f59c2febee2e429aad2588a1bdbc7a142aa1aa6e",
+  "rollbackIndex": "/root/draw-studio/backups/frontend-ui-20261003T104011710127Z-f3047111/index.html",
+  "workflowFilesUnchanged": 223,
+  "processesUnchanged": true,
+  "verification": [
+    {
+      "entry": "https://u1159393-7896c7f82fde.westd.seetacloud.com:8443/canvas/",
+      "assetsVerified": 8,
+      "frontendMatches": true,
+      "websocket": 101,
+      "__canvas/workflow-library": 200,
+      "workflows": 76,
+      "issues": 7,
+      "comfy/system_stats": 200,
+      "comfyVersion": "0.38.1",
+      "comfy/queue": 200,
+      "running": 0,
+      "pending": 0,
+      "comfy/object_info": 200
+    },
+    {
+      "entry": "https://uu1159393-7896c7f82fde.westd.seetacloud.com:8443/canvas/",
+      "assetsVerified": 8,
+      "frontendMatches": true,
+      "websocket": 101,
+      "__canvas/workflow-library": 200,
+      "workflows": 76,
+      "issues": 7,
+      "comfy/system_stats": 200,
+      "comfyVersion": "0.38.1",
+      "comfy/queue": 200,
+      "running": 0,
+      "pending": 0,
+      "comfy/object_info": 200
+    }
+  ],
+  "privateImageUpdated": false,
+  "privateImageNote": "Existing private image remains its earlier fixed snapshot; this update persists on the running instance filesystem."
+}

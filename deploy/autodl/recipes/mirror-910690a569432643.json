@@ -1,0 +1,25 @@
+{
+  "3": {
+    "inputs": {
+      "clear_cuda_cache": true,
+      "clear_hf_pipeline_cache": false
+    },
+    "class_type": "VRGDG_UnloadGemmaModels",
+    "_meta": {
+      "title": "VRGDG Unload Gemma/GGUF Models"
+    }
+  },
+  "4": {
+    "inputs": {
+      "text_0": "VRGDG Gemma/GGUF cleanup complete.\nGGUF models unloaded: 0\nHF pipelines unloaded: 0\nCUDA cache cleared: yes",
+      "text": [
+        "3",
+        0
+      ]
+    },
+    "class_type": "VRGDG_ShowText",
+    "_meta": {
+      "title": "VRGDG_ShowText"
+    }
+  }
+}

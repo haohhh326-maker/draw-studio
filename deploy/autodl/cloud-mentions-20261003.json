@@ -1,0 +1,30 @@
+{
+  "release": "Draw studio mentions 2026.10.03",
+  "instance": "pro-7896c7f82fde",
+  "deployedAt": "2026-10-03T13:57:11.107501+00:00",
+  "features": [
+    "Image and video prompts can select connected materials by typing @",
+    "Inline thumbnail tags support saving, copy and paste, undo and deletion",
+    "Disconnected references are identified before generation"
+  ],
+  "archiveSha256": "71f4ad3eb75d152d5bd4976af287205ea1dcd8056f48fd2c93e0b874fc3b74d6",
+  "backup": "/root/draw-studio/backups/frontend-ui-20261003T135710982078Z-bca66eb7",
+  "protectedStateUnchanged": true,
+  "workflowFilesUnchanged": 223,
+  "privateImageUpdated": false,
+  "validation": {
+    "build": "passed",
+    "testsPassed": 768,
+    "testsSkipped": 2,
+    "localImageAndVideoEditor": "passed",
+    "cloudMentionMenu": "passed",
+    "actualGenerationSubmitted": false,
+    "publicEntries": [
+      "https://u1159393-7896c7f82fde.westd.seetacloud.com:8443/canvas/",
+      "https://uu1159393-7896c7f82fde.westd.seetacloud.com:8443/canvas/"
+    ],
+    "frontendHashesMatch": true,
+    "apiStatus": 200,
+    "websocketStatus": 101
+  }
+}

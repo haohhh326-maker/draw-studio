@@ -1,0 +1,148 @@
+{
+  "955": {
+    "inputs": {
+      "model_name": "htdemucs_ft",
+      "device": "auto",
+      "audio_file_path": "",
+      "audio": [
+        "964",
+        0
+      ]
+    },
+    "class_type": "VRGDG_GetStems",
+    "_meta": {
+      "title": "VRGDG_GetStems"
+    }
+  },
+  "956": {
+    "inputs": {
+      "final_mix": [
+        "964",
+        0
+      ],
+      "drums": [
+        "955",
+        1
+      ],
+      "bass": [
+        "955",
+        2
+      ],
+      "vocals": [
+        "955",
+        0
+      ],
+      "other": [
+        "955",
+        3
+      ]
+    },
+    "class_type": "BeatImpactAnalysisNode",
+    "_meta": {
+      "title": "BeatImpactAnalysisNode"
+    }
+  },
+  "957": {
+    "inputs": {
+      "value": ""
+    },
+    "class_type": "PrimitiveString",
+    "_meta": {
+      "title": "String"
+    }
+  },
+  "958": {
+    "inputs": {
+      "srt_path": [
+        "959",
+        0
+      ],
+      "fps": 24,
+      "scene_duration_seconds": 15,
+      "use_ltx2": false,
+      "language": "english",
+      "audio": [
+        "955",
+        0
+      ]
+    },
+    "class_type": "VRGDG_ManualLyricsExtractor_SRT",
+    "_meta": {
+      "title": "Manual Lyrics Extractor (SRT Segments)"
+    }
+  },
+  "959": {
+    "inputs": {
+      "switch": true,
+      "on_false": [
+        "957",
+        0
+      ],
+      "on_true": [
+        "963",
+        1
+      ]
+    },
+    "class_type": "ComfySwitchNode",
+    "_meta": {
+      "title": "use SRT duration file"
+    }
+  },
+  "960": {
+    "inputs": {
+      "lyrics_text": [
+        "958",
+        0
+      ],
+      "repeat_output_count": 3,
+      "min_repeats_to_collapse": 4,
+      "bridge_single_word_segments": true
+    },
+    "class_type": "VRGDG_LyricSegmentTextCleaner",
+    "_meta": {
+      "title": "VRGDG Lyric Segment Text Cleaner"
+    }
+  },
+  "961": {
+    "inputs": {
+      "text_0": "# Lyrics to fix: (40 segments)\n\nlyricSegment1=Thank you.\nlyricSegment2=Like anyone would be I\nlyricSegment3=I am flattered by your fascination with me.\nlyricSegment4=Like any hot blooded woman\nlyricSegment5=I have simply wanted an object to crave\nlyricSegment6=But you  you're not alone. You're a...\nlyricSegment7=I'm not invited on unfortunate\nlyricSegment8=Unfortunate, slight, sweet.\nlyricSegment9=Sweet  strangely\nlyricSegment10=Exciting to watch the stoic\nlyricSegment11=Stoic, femme, must.\nlyricSegment12=Must be somewhat heart telling to watch him burn me.\nlyricSegment13=Yeah  I've heard But you  you're not a\nlyricSegment14=You're on in my\nlyricSegment15=An unfortunate slide\nlyricSegment16=Thank you.\nlyricSegment17=Thank you.\nlyricSegment18=Like a young child in territory\nlyricSegment19=I'll see you greatly in training.\nlyricSegment20=you speak of my love like you have\nlyricSegment21=I've never experienced love like mine before.\nlyricSegment22=This is not allowed. You're not.\nlyricSegment23=Not, unfortunately, slides.\nlyricSegment24=unfortunately, slides, thank.\nlyricSegment25=Thank you.\nlyricSegment26=I don't think you\nlyricSegment27=I need a moment to\nlyricSegment28=To, bye, thank.\nlyricSegment29=Thank you.\nlyricSegment30=Thank you.\nlyricSegment31=Thank you.\nlyricSegment32=Thank you.\nlyricSegment33=Thank you.\nlyricSegment34=Oh, Oh, Oh.\nlyricSegment35=Oh, Oh, Oh.\nlyricSegment36=Thank you.\nlyricSegment37=Thank you.\nlyricSegment38=Thank you.\nlyricSegment39=Thank you.\nlyricSegment40=Oh, Oh, Oh.",
+      "text": [
+        "960",
+        0
+      ]
+    },
+    "class_type": "VRGDG_ShowText",
+    "_meta": {
+      "title": "VRGDG_ShowText(whisper transcription)"
+    }
+  },
+  "963": {
+    "inputs": {
+      "beat_data": [
+        "956",
+        0
+      ],
+      "min_duration": 4,
+      "max_duration": 10,
+      "bias": 0.7,
+      "duration_preset": "varied_no_repeat",
+      "seed": 11,
+      "output_filename": 0.5
+    },
+    "class_type": "BeatSceneDurationNode",
+    "_meta": {
+      "title": "Beat-Aligned Scene Durations"
+    }
+  },
+  "964": {
+    "inputs": {
+      "audio": "",
+      "start_time": 0,
+      "duration": 0
+    },
+    "class_type": "VHS_LoadAudioUpload",
+    "_meta": {
+      "title": "Load Audio (Upload)🎥🅥🅗🅢"
+    }
+  }
+}

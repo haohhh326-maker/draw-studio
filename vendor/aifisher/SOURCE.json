@@ -1,0 +1,155 @@
+{
+  "repository": "https://github.com/Work-Fisher/AIFISHER",
+  "revision": "bdcf3bec054594fcab591952a8c5acef858d6de4",
+  "sourcePolicy": "All listed upstream files are byte-for-byte copies. Application boundary adapters and type declarations are separate files.",
+  "license": "AIFISHER Noncommercial Source License 1.0",
+  "files": [
+    {
+      "path": "LICENSE",
+      "sha256": "3e213313aef9a4ebc849f874b4109473b2b5bb9fef84b4c1d44ddf72c907d235",
+      "bytes": 4020
+    },
+    {
+      "path": "THIRD-PARTY-NOTICES.md",
+      "sha256": "00415453a51f6bf10ac2fc26abe87601be4a7d8ea948e2e6f6e86bf1fe07b205",
+      "bytes": 933
+    },
+    {
+      "path": "server/agent/drama/officialDramaBundle.js",
+      "sha256": "99fb316d3da0e88a6478c02611d95c477fd82362883e0f1f0cd16715560ae3c4",
+      "bytes": 10301
+    },
+    {
+      "path": "server/comfyui/comfyServerAddress.js",
+      "sha256": "845d7c2aa232b1b4faf0b2ebad5a499ff625174984dc732c04449d1fa947bc45",
+      "bytes": 785
+    },
+    {
+      "path": "server/media/mediaArtifact.js",
+      "sha256": "50a74f6f089d228cf5a7f1d2a8cc51439f989494c2408b155c114e052c6320b5",
+      "bytes": 11684
+    },
+    {
+      "path": "server/security/externalUrlPolicy.js",
+      "sha256": "3f207dd76453f45739bd825176f7117244181eff343c79b264cb39461a90e0f5",
+      "bytes": 3913
+    },
+    {
+      "path": "server/workflowRuntime/cloudMediaInputs.js",
+      "sha256": "24b32bb5fd994f92bb85a1fb1fba48e92f574f9cc94ca144706eae7ae7892866",
+      "bytes": 2587
+    },
+    {
+      "path": "server/workflowRuntime/comfySavedOutputs.js",
+      "sha256": "d7301400601b8faae4e586305e1bf392ac809d915b5057ac14f1f42cafd6dfcb",
+      "bytes": 1074
+    },
+    {
+      "path": "server/workflowRuntime/localComfyClient.js",
+      "sha256": "c1e2d3e4172d001640f1035b15993cc2d3d8f50522a59018e3c7c518110f95be",
+      "bytes": 19166
+    },
+    {
+      "path": "server/workflowRuntime/officialWorkflowCatalog.js",
+      "sha256": "6ca0d51e4bd0152645fcff8eb0becccdb800a9de01b4c6bf6ecff4548c5cb3d2",
+      "bytes": 1669
+    },
+    {
+      "path": "server/workflowRuntime/runningHubCover.js",
+      "sha256": "8f20c4175ce117d03ae0c3192ab2a69197fadd543d83dbc066d44762feabe9dc",
+      "bytes": 2633
+    },
+    {
+      "path": "server/workflowRuntime/runningHubWebApp.js",
+      "sha256": "cc16f27f5c3e78dd1e28b566745eaec9df4420137cbf9e2157059d2897ae4edf",
+      "bytes": 10656
+    },
+    {
+      "path": "server/workflowRuntime/runningHubWebAppLibraryService.js",
+      "sha256": "646e63242fbd3731a034b36d4c3991a5d3c79d00c55462ebb10258605fc2da92",
+      "bytes": 16860
+    },
+    {
+      "path": "server/workflowRuntime/runningHubWorkflowClient.js",
+      "sha256": "f4ced93185d8e94e795e76adcef218f36df063a156b9a0aa1aea3f999c0323d4",
+      "bytes": 35261
+    },
+    {
+      "path": "server/workflowRuntime/workflowAttestationService.js",
+      "sha256": "68de997e04fecaa488c3a1ad57d4ff8b9dddb3ca46191945f120e2a1858a9da3",
+      "bytes": 11947
+    },
+    {
+      "path": "server/workflowRuntime/workflowBindingCompiler.js",
+      "sha256": "64a82fafb756e04111ff63e6a8ec9c5896f025dbc52180edfb73fa5e18689cf3",
+      "bytes": 36153
+    },
+    {
+      "path": "server/workflowRuntime/workflowCanvasNodeService.js",
+      "sha256": "b981efd698eb92ed0c9c0090b3bcf07985aa50334737bb6266436803a146ec79",
+      "bytes": 18734
+    },
+    {
+      "path": "server/workflowRuntime/workflowConfigurationStore.js",
+      "sha256": "25268c9b3f9d2dd8ad20daee64d078e745fb5d86c8504bde3d36790b8250d9bc",
+      "bytes": 21186
+    },
+    {
+      "path": "server/workflowRuntime/workflowDefinitionStore.js",
+      "sha256": "4ce8a309fc0f9e754350923745b26601f0ea96bed87c7b123fb0af5ca5e02083",
+      "bytes": 16559
+    },
+    {
+      "path": "server/workflowRuntime/workflowDeploymentService.js",
+      "sha256": "0c2c9daf40a2ff7eebff4efe02adc353344c7b747ef102768bb8afcd43fc8336",
+      "bytes": 23487
+    },
+    {
+      "path": "server/workflowRuntime/workflowFormat.js",
+      "sha256": "12d8e9fbb0b0e5df582f165a285c8b73b49a9848ec81fdef9d6eac0982ecac6d",
+      "bytes": 48480
+    },
+    {
+      "path": "server/workflowRuntime/workflowOutputs.js",
+      "sha256": "7efe8e9c96d470eaaed83676be809a23daf37ab75b976fee4acb20eae036c479",
+      "bytes": 6481
+    },
+    {
+      "path": "server/workflowRuntime/workflowStoragePaths.js",
+      "sha256": "cb63f12b4d8fe4063b353ee4d3dabf37da9a0af1786fb64d3dd2f45ab2a6b758",
+      "bytes": 1537
+    },
+    {
+      "path": "server/workflowRuntime/workflowVariableAssetGroups.js",
+      "sha256": "2733c780ef603ef18c7cc7e2ec86ed8ec64831383f5cc847d1525a878f748933",
+      "bytes": 13626
+    },
+    {
+      "path": "server/workspace/resourceOwnership.js",
+      "sha256": "a98404388e4ecb9246e3796824d5fe84a10218efe6c3c4af084754cce1b6bf14",
+      "bytes": 3935
+    },
+    {
+      "path": "server/workspace/runtimePaths.js",
+      "sha256": "19702cff82950f4c993129c157ee9b45e873bddf92f2339c8312df9a5a161e65",
+      "bytes": 3331
+    },
+    {
+      "path": "server/workspace/userScopeResolver.js",
+      "sha256": "32364836b91639cc1d171f6945a411712988bc93d523e54fe02d31fa96866416",
+      "bytes": 7955
+    },
+    {
+      "path": "src/shared/officialProductionProfiles.js",
+      "sha256": "cfede1c593a8519fab971c73bf2e3ce554c9ae2064d3d49ec7c4cbc918d85def",
+      "bytes": 886
+    }
+  ],
+  "runtimePolicy": "Complete upstream module imports. Host transport disables request deadlines; no source slicing, substitutions or source edits.",
+  "dependencies": {
+    "sharp": "0.35.3",
+    "node-fetch": "3.3.2",
+    "form-data": "4.0.6",
+    "ws": "8.21.2"
+  }
+}

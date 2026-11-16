@@ -1,0 +1,34 @@
+{
+  "speech": {
+    "class_type": "VRGDG_VoxCPM2Generate",
+    "inputs": {
+      "text": "",
+      "mode": "text_to_speech",
+      "device": "auto",
+      "cfg_value": 2,
+      "inference_timesteps": 10,
+      "load_denoiser": false,
+      "normalize_text": false,
+      "retry_badcase": true,
+      "retry_badcase_max_times": 3,
+      "retry_badcase_ratio_threshold": 6,
+      "min_len": 2,
+      "max_len": 4096,
+      "save_filename_prefix": "canvas/voxcpm2",
+      "prompt_text": "",
+      "reference_audio_path": "",
+      "prompt_audio_path": ""
+    }
+  },
+  "save": {
+    "class_type": "SaveAudioMP3",
+    "inputs": {
+      "audio": [
+        "speech",
+        0
+      ],
+      "filename_prefix": "canvas/voxcpm2",
+      "quality": "V0"
+    }
+  }
+}

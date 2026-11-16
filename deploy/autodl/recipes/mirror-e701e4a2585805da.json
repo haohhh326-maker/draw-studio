@@ -1,0 +1,35 @@
+{
+  "785": {
+    "class_type": "VRGDG_ShowText",
+    "inputs": {
+      "text": [
+        "790:783:39",
+        0
+      ]
+    },
+    "_meta": {
+      "title": "TEMP LOCATION"
+    }
+  },
+  "790:783:35": {
+    "class_type": "PrimitiveInt",
+    "inputs": {
+      "value": -630152252947771
+    },
+    "_meta": {
+      "title": "PrimitiveInt"
+    }
+  },
+  "790:783:39": {
+    "class_type": "VRGDG_LoadAudioFilePath",
+    "inputs": {
+      "refresh": [
+        "790:783:35",
+        0
+      ]
+    },
+    "_meta": {
+      "title": "VRGDG_LoadAudioFilePath"
+    }
+  }
+}

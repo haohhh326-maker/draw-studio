@@ -1,0 +1,31 @@
+{
+  "os": "Ubuntu 22.04.5",
+  "python": "3.12.3",
+  "torch": "2.12.1+cu130",
+  "gpu": "cuda:0 NVIDIA GeForce RTX 5090 : cudaMallocAsync",
+  "comfyui": "0.38.1",
+  "comfyui_commit": "20ca544ee0436721d8eb5f544665e490609f72c8",
+  "frontend": "1.53.6",
+  "node": "24.13.1",
+  "plugins": {
+    "ComfyUI-Impact-Pack": "429d0159ad429e64d2b3916e6e7be9c22d025c3c",
+    "ComfyUI-SeedVR2_VideoUpscaler": "4490bd1f482e026674543386bb2a4d176da245b9",
+    "ComfyUI_Comfyroll_CustomNodes": "d78b780ae43fcf8c6b7c6505e6ffb4584281ceca",
+    "AIGODLIKE-COMFYUI-TRANSLATION": "94903b39c7c68e14151d7caf7c4f12702a3714fb",
+    "comfyui_controlnet_aux": "0cd290477128d42cdc3e76a826a402d866e8c684",
+    "ComfyUI-SoundFlow": "1ffb30ff422cce1c6ff386dbda9d6434d77e790b",
+    "ComfyUI-Manager": "d47c9346190397e1c316bc5a82155faaf9f5d700",
+    "ComfyUI-VideoHelperSuite": "4ee72c065db22c9d96c2427954dc69e7b908444b",
+    "ComfyUI-KJNodes": "3f20054214fec9f9234fd3841ae6f1e4287948f6",
+    "was-node-suite-comfyui": "ea935d1044ae5a26efa54ebeb18fe9020af49a45",
+    "comfyui-crystools": "2f18256c5b5063937106f29a8e0a7db3ae3869b7",
+    "Comfyui-Easy-Use": "4de1ab3b66e48da916b6f263bacd001df53a2720",
+    "ComfyUI-SolAttn_triton": "0e334dc981cfe3b0ed926ee13ad43f64914b7f5b",
+    "comfyui-vrgamedevgirl": "cf316dbfa89b4ca61d9bf99f27c2c6eae0e5f94b",
+    "ComfyUI_RH_VoxCPM": "1cd7b29fb6596588319fc5ad49cd78f5b5375d76",
+    "ComfyUI_LayerStyle": "a3459a7638c4c2839878089c105c73af0eb2edd2"
+  },
+  "model_links": 66,
+  "missing_model_links": 0,
+  "note": "2026-10-03 Draw studio 云端部署现场记录。模型通过 AutoDL Art 公共模型挂载使用；并非模型权重内嵌包。"
+}

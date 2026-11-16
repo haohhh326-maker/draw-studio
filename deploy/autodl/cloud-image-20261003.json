@@ -1,0 +1,79 @@
+{
+  "name": "Draw studio 2026.10.03",
+  "imageId": "image-822868bbe8",
+  "status": "ready",
+  "size": "4.83GB",
+  "private": true,
+  "startCommand": "bash /root/draw-studio/deploy/autodl/start-stack.sh",
+  "cloudRoot": "/root/draw-studio",
+  "instance": "pro-7896c7f82fde",
+  "consoleCreatedAt": "2026-10-03 17:19",
+  "frontEnd": "2026-10-03 local latest cloud build",
+  "verificationBeforeSave": [
+    {
+      "entry": "https://u1159393-7896c7f82fde.westd.seetacloud.com:8443",
+      "frontend": "latest build SHA matches",
+      "assetsVerified": 7,
+      "__canvas/workflow-library": 200,
+      "workflows": 76,
+      "issues": 7,
+      "comfy/system_stats": 200,
+      "comfyVersion": "0.38.1",
+      "comfy/queue": 200,
+      "comfy/object_info": 200,
+      "deleteValidation": 400,
+      "websocket": 101
+    },
+    {
+      "entry": "https://uu1159393-7896c7f82fde.westd.seetacloud.com:8443",
+      "frontend": "latest build SHA matches",
+      "assetsVerified": 7,
+      "__canvas/workflow-library": 200,
+      "workflows": 76,
+      "issues": 7,
+      "comfy/system_stats": 200,
+      "comfyVersion": "0.38.1",
+      "comfy/queue": 200,
+      "comfy/object_info": 200,
+      "deleteValidation": 400,
+      "websocket": 101
+    }
+  ],
+  "bootVerification": "passed",
+  "verificationAfterBoot": [
+    {
+      "entry": "https://u1159393-7896c7f82fde.westd.seetacloud.com:8443",
+      "frontend": "latest build SHA matches",
+      "assetsVerified": 7,
+      "__canvas/workflow-library": 200,
+      "workflows": 76,
+      "issues": 7,
+      "comfy/system_stats": 200,
+      "comfyVersion": "0.38.1",
+      "comfy/queue": 200,
+      "comfy/object_info": 200,
+      "deleteValidation": 400,
+      "websocket": 101
+    },
+    {
+      "entry": "https://uu1159393-7896c7f82fde.westd.seetacloud.com:8443",
+      "frontend": "latest build SHA matches",
+      "assetsVerified": 7,
+      "__canvas/workflow-library": 200,
+      "workflows": 76,
+      "issues": 7,
+      "comfy/system_stats": 200,
+      "comfyVersion": "0.38.1",
+      "comfy/queue": 200,
+      "comfy/object_info": 200,
+      "deleteValidation": 400,
+      "websocket": 101
+    }
+  ],
+  "modelChoicesAfterBoot": {
+    "qwen_image_2.1_bf16.safetensors": true,
+    "qwen3.5_9b_qwen_image_2.1_pe_i2i.int8_convrot.safetensors": true,
+    "loraCount": 17
+  },
+  "verificationLimits": "未另租新实例加载镜像；已完成原实例关机/开机与两入口验收。未提交真实生成任务。"
+}

@@ -1,0 +1,76 @@
+:root.desktop-titlebar-enabled {
+  --desktop-titlebar-height: 36px;
+  --desktop-content-height: calc(100dvh - var(--desktop-titlebar-height));
+}
+.desktop-frame {
+  display: grid;
+  grid-template-rows: var(--desktop-titlebar-height) minmax(0, 1fr);
+  width: 100%;
+  height: 100dvh;
+  overflow: hidden;
+  background: var(--surface);
+}
+.desktop-titlebar {
+  position: relative;
+  z-index: 10000;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  height: var(--desktop-titlebar-height);
+  padding: 0 150px 0 12px;
+  color: var(--text-secondary);
+  background: var(--surface);
+  font-size: 12px;
+  line-height: 1;
+  font-weight: 500;
+  user-select: none;
+  -webkit-app-region: drag;
+  app-region: drag;
+}
+.desktop-titlebar img {
+  display: block;
+  flex: none;
+  border-radius: 4px;
+  object-fit: contain;
+  pointer-events: none;
+}
+.desktop-titlebar span { overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+.desktop-frame-content {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+  background: #000;
+}
+.desktop-frame-content > .app,
+.desktop-frame-content .startup { width: 100%; height: 100%; }
+.desktop-frame-content > .app { position: relative; }
+.desktop-frame-content .canvas-shell { position: absolute; inset: 0; height: 100%; }
+.desktop-frame-content .topbar { background: transparent; pointer-events: none; }
+.desktop-frame-content .topbar > * { pointer-events: auto; }
+.desktop-frame-content .canvas-service-panel {
+  top: calc(var(--topbar-height) + 20px);
+  height: min(850px, calc(100% - var(--topbar-height) - 40px));
+  min-height: min(430px, calc(100% - var(--topbar-height) - 40px));
+  max-height: calc(100% - var(--topbar-height) - 16px);
+}
+
+/* Anchored menus retain viewport coordinates. Full-window layers reserve the caption. */
+.desktop-titlebar-enabled :is(.project-home, .project-transition, .modal-backdrop, .directory-overlay,
+  .rh-workflow-dialog-layer, .workflow-credentials-layer, .software-update-layer,
+  .image-crop-overlay, .media-viewer-overlay, .library-entry-layer) {
+  top: var(--desktop-titlebar-height);
+}
+.desktop-titlebar-enabled .project-home { height: var(--desktop-content-height); }
+.desktop-titlebar-enabled .modal { max-height: min(90vh, calc(var(--desktop-content-height) - 70px)); }
+.desktop-titlebar-enabled .optimization-settings { top: calc(var(--desktop-titlebar-height) + var(--topbar-height) + 12px); }
+.desktop-titlebar-enabled .generation-clamped > .generation-panel { max-height: calc(var(--desktop-content-height) - 96px); }
+.desktop-titlebar-enabled .media-viewer:not(:fullscreen) { height: min(850px, calc(var(--desktop-content-height) - 48px)); }
+.desktop-titlebar-enabled .media-viewer.is-fullscreen:not(:fullscreen) {
+  top: var(--desktop-titlebar-height);
+  height: var(--desktop-content-height);
+}
+.desktop-titlebar-enabled .image-cropper { height: min(850px, calc(var(--desktop-content-height) - 32px)); }

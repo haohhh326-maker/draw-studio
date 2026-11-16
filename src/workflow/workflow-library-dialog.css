@@ -1,0 +1,25 @@
+.workflow-library-dialog {
+  font-family: var(--font-ui);
+  font-size: var(--font-size-body);
+  line-height: var(--line-height-body);
+  padding: 20px;
+}
+
+.workflow-library-dialog .workflow-library-status {
+  font-size: var(--font-size-caption);
+  line-height: var(--line-height-body);
+  margin-bottom: 0;
+}
+
+.workflow-library-dialog > button { font-family: var(--font-ui); font-size: var(--font-size-label); font-weight: var(--font-weight-medium); line-height: var(--line-height-body); margin-bottom: 16px; border: 1px solid var(--border-strong); border-radius: 8px; padding: 9px 14px; background: var(--surface-raised); color: var(--text); cursor: pointer; }
+.workflow-library-pending > details { padding: 12px; margin-top: 12px; border: 1px solid var(--surface-border); border-radius: 8px; overflow-wrap: anywhere; }
+.workflow-library-pending h4 { font-size: var(--font-size-label); font-weight: var(--font-weight-semibold); line-height: var(--line-height-title); color: #ded0a8; }
+.workflow-library-pending button { font-size: var(--font-size-label); font-weight: var(--font-weight-medium); display: inline-flex; align-items: center; gap: 7px; }
+
+.modal:has(> .workflow-library-dialog) > header .eyebrow {
+  display: none;
+}
+.workflow-library-dialog .workflow-library-heading h3 { font-size: var(--font-size-title); font-weight: var(--font-weight-title); line-height: var(--line-height-title); }
+.workflow-library-dialog .workflow-library-heading button { font-size: var(--font-size-label); font-weight: var(--font-weight-medium); }
+.workflow-library-dialog .workflow-library-path { font-family: var(--font-mono); font-size: var(--font-size-caption); }
+.workflow-library-pending summary { font-size: var(--font-size-label); font-weight: var(--font-weight-medium); }

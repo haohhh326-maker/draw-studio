@@ -1,0 +1,167 @@
+{
+  "60": {
+    "class_type": "SaveImage",
+    "inputs": {
+      "filename_prefix": "ComfyUI",
+      "images": [
+        "75:8",
+        0
+      ]
+    },
+    "_meta": {
+      "title": "SaveImage"
+    }
+  },
+  "79": {
+    "class_type": "Text Multiline",
+    "inputs": {
+      "text": "A realistic beauty portrait, close-up headshot of a woman with freckled fair skin, red hair in a loose messy bun, green eyes, minimal makeup, soft peach blush, natural light reflecting in her eyes, light gray backdrop, warm golden hour lighting, sharp detail on skin pores and fine hairs, medium format camera, eye-level shot."
+    },
+    "_meta": {
+      "title": "Shared Prompt"
+    }
+  },
+  "75:7": {
+    "class_type": "CLIPTextEncode",
+    "inputs": {
+      "text": "",
+      "clip": [
+        "75:38",
+        0
+      ]
+    },
+    "_meta": {
+      "title": "CLIP Text Encode (Negative Prompt)"
+    }
+  },
+  "75:6": {
+    "class_type": "CLIPTextEncode",
+    "inputs": {
+      "text": [
+        "79",
+        0
+      ],
+      "clip": [
+        "75:38",
+        0
+      ]
+    },
+    "_meta": {
+      "title": "CLIP Text Encode (Positive Prompt)"
+    }
+  },
+  "75:66": {
+    "class_type": "ModelSamplingAuraFlow",
+    "inputs": {
+      "shift": 3.1000000000000005,
+      "model": [
+        "75:73",
+        0
+      ]
+    },
+    "_meta": {
+      "title": "ModelSamplingAuraFlow"
+    }
+  },
+  "75:8": {
+    "class_type": "VAEDecode",
+    "inputs": {
+      "samples": [
+        "75:3",
+        0
+      ],
+      "vae": [
+        "75:39",
+        0
+      ]
+    },
+    "_meta": {
+      "title": "VAEDecode"
+    }
+  },
+  "75:37": {
+    "class_type": "UNETLoader",
+    "inputs": {
+      "unet_name": "qwen_image_fp8_e4m3fn.safetensors",
+      "weight_dtype": "default"
+    },
+    "_meta": {
+      "title": "UNETLoader"
+    }
+  },
+  "75:39": {
+    "class_type": "VAELoader",
+    "inputs": {
+      "vae_name": "qwen_image_vae.safetensors"
+    },
+    "_meta": {
+      "title": "VAELoader"
+    }
+  },
+  "75:58": {
+    "class_type": "EmptySD3LatentImage",
+    "inputs": {
+      "width": 1328,
+      "height": 1328,
+      "batch_size": 1
+    },
+    "_meta": {
+      "title": "EmptySD3LatentImage"
+    }
+  },
+  "75:73": {
+    "class_type": "LoraLoaderModelOnly",
+    "inputs": {
+      "lora_name": "Qwen-Image-Lightning-8steps-V1.0.safetensors",
+      "strength_model": 1,
+      "model": [
+        "75:37",
+        0
+      ]
+    },
+    "_meta": {
+      "title": "LoraLoaderModelOnly"
+    }
+  },
+  "75:3": {
+    "class_type": "KSampler",
+    "inputs": {
+      "seed": 1000,
+      "steps": 10,
+      "cfg": 1,
+      "sampler_name": "euler",
+      "scheduler": "simple",
+      "denoise": 1,
+      "model": [
+        "75:66",
+        0
+      ],
+      "positive": [
+        "75:6",
+        0
+      ],
+      "negative": [
+        "75:7",
+        0
+      ],
+      "latent_image": [
+        "75:58",
+        0
+      ]
+    },
+    "_meta": {
+      "title": "KSampler"
+    }
+  },
+  "75:38": {
+    "class_type": "CLIPLoader",
+    "inputs": {
+      "clip_name": "qwen_2.5_vl_7b_fp8_scaled.safetensors",
+      "type": "qwen_image",
+      "device": "default"
+    },
+    "_meta": {
+      "title": "CLIPLoader"
+    }
+  }
+}

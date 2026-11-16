@@ -1,0 +1,381 @@
+{
+  "scope": "Real browser-to-ComfyUI tests with one submission, download, original-node writeback, and offline reload. Small acceptance fixtures, not quality or long-duration stress tests.",
+  "passed_workflows": 18,
+  "passed_runs": 18,
+  "results": [
+    {
+      "status": "passed",
+      "taskId": "9daedb39-a1e8-47d5-abb2-5d3f154120dc",
+      "promptId": "17a30c59-5daa-4948-b013-fd908cc0d8a5",
+      "duration": 5.167,
+      "bytes": 212644,
+      "submissions": 1,
+      "offlineReload": true,
+      "workflowId": "preset-1-1",
+      "name": "H3 单图参考 · 4 步",
+      "kind": "video",
+      "case": "2026-09-20T23-31-09-145Z",
+      "sha256": "db13a2352c37d67b4c439ab539de8e58729a35e9f40b2adb93c29c39f913f932",
+      "parameters": {
+        "duration": 5,
+        "seed": 58,
+        "megapixels": 0.6
+      }
+    },
+    {
+      "status": "passed",
+      "workflowId": "preset-1-0",
+      "taskId": "42644ea6-5005-4366-8f4f-408b3d85133a",
+      "promptId": "9fcccb92-aed9-45ff-bfc4-9e87b198c4c7",
+      "duration": 5.167,
+      "bytes": 348800,
+      "submissions": 1,
+      "offlineReload": true,
+      "name": "H3 文生视频 · 8 步",
+      "kind": "video",
+      "case": "2026-09-23T10-32-48-520Z-preset-1-0",
+      "sha256": "d33ec5c5d62f87390cd0e6b890441d9d0b93a3039fa9656f9f533f68f0d43ec0",
+      "parameters": {
+        "duration": 5,
+        "seed": 58,
+        "megapixels": 0.6,
+        "aspectRatio": "9:16 (Portrait Widescreen)"
+      }
+    },
+    {
+      "status": "passed",
+      "workflowId": "preset-1-2",
+      "taskId": "a729962d-a8f3-460a-8517-0fbcf9878418",
+      "promptId": "6b7c54b0-99dc-4536-ac0a-d7dbca1ebe15",
+      "duration": 5.167,
+      "bytes": 215816,
+      "submissions": 1,
+      "offlineReload": true,
+      "name": "H3 首尾帧视频 · 8 步",
+      "kind": "video",
+      "case": "2026-09-23T10-37-02-276Z-preset-1-2",
+      "sha256": "ca34fd29389d51b3fbc08035f8e846fbc91fabc0b84a4a93904a84a67f22740c",
+      "parameters": {
+        "duration": 5,
+        "seed": 58,
+        "megapixels": 0.6,
+        "aspectRatio": "9:16 (Portrait Widescreen)"
+      }
+    },
+    {
+      "status": "passed",
+      "workflowId": "h3-turbo-first-frame",
+      "taskId": "9c0d3d92-0577-42b0-bf0d-cae8e9425120",
+      "promptId": "583144cd-3d9a-4721-b824-ee73ec09ae98",
+      "duration": 5.167,
+      "bytes": 263893,
+      "submissions": 1,
+      "offlineReload": true,
+      "name": "H3 首帧图生视频 · 8 步",
+      "kind": "video",
+      "case": "2026-09-23T10-38-23-469Z-h3-turbo-first-frame",
+      "sha256": "92921c2bd2aae0164e6c6aa125113e4b6a010f968a67bbf21291a3e180cfe98e",
+      "parameters": {
+        "duration": 5,
+        "seed": 58,
+        "megapixels": 0.6,
+        "aspectRatio": "9:16 (Portrait Widescreen)"
+      }
+    },
+    {
+      "status": "passed",
+      "workflowId": "preset-1-4",
+      "taskId": "be6ca602-d4b2-4708-9d33-159f3768ca08",
+      "promptId": "45772e10-4e67-40b4-9764-1b709bde863f",
+      "duration": 5.167,
+      "bytes": 240555,
+      "submissions": 1,
+      "offlineReload": true,
+      "name": "H3 视频参考 · 4 步",
+      "kind": "video",
+      "case": "2026-09-23T10-39-45-350Z-preset-1-4",
+      "sha256": "d9a7d81d0bdf1ff8a4ba7382e2f8b14cbc86dd6135dffd973b491e54603d1a5c",
+      "parameters": {
+        "duration": 5,
+        "seed": 58,
+        "megapixels": 0.6,
+        "aspectRatio": "9:16 (Portrait Widescreen)"
+      }
+    },
+    {
+      "status": "passed",
+      "workflowId": "h3-turbo-mixed",
+      "taskId": "f6c0acef-fb19-4787-8f1c-9003552a72b2",
+      "promptId": "61ae1c55-6192-4c14-bac7-82756fbcad6b",
+      "duration": 5.167,
+      "bytes": 247510,
+      "submissions": 1,
+      "offlineReload": true,
+      "name": "H3 多参考视频 · 4 步",
+      "kind": "video",
+      "case": "2026-09-23T10-42-09-074Z-h3-turbo-mixed",
+      "sha256": "94a5b79b345c988c5c58aec4dcd0ce823172e88728cd49aaa057dd45ba501116",
+      "parameters": {
+        "duration": 5,
+        "seed": 58,
+        "megapixels": 0.6,
+        "aspectRatio": "9:16 (Portrait Widescreen)"
+      }
+    },
+    {
+      "status": "passed",
+      "workflowId": "h3-turbo-audio",
+      "taskId": "add43aea-d8db-4af5-96e2-345d27245e45",
+      "promptId": "49973a1a-0df4-4068-ad30-de5eabc7d411",
+      "duration": 5.167,
+      "bytes": 245739,
+      "submissions": 1,
+      "offlineReload": true,
+      "name": "H3 音频参考视频 · 4 步",
+      "kind": "video",
+      "case": "2026-09-23T10-43-02-515Z-h3-turbo-audio",
+      "sha256": "0a010d604a11fea19efb7f4a7149c1d244b64259c8d7cde15a535f2c16383975",
+      "parameters": {
+        "duration": 5,
+        "seed": 58,
+        "megapixels": 0.6,
+        "aspectRatio": "9:16 (Portrait Widescreen)"
+      }
+    },
+    {
+      "status": "passed",
+      "workflowId": "h3-turbo-driven",
+      "taskId": "89061373-1e53-454d-91b5-81093c6529be",
+      "promptId": "97d40082-1532-403f-813f-0a0ad422aed3",
+      "duration": 5.167,
+      "bytes": 168716,
+      "submissions": 1,
+      "offlineReload": true,
+      "name": "H3 音频驱动视频 · 4 步",
+      "kind": "video",
+      "case": "2026-09-23T10-43-57-624Z-h3-turbo-driven",
+      "sha256": "4818702da084df57c873e7e084c33d8a4ef3f9105f4e043e398409878c335860",
+      "parameters": {
+        "duration": 5,
+        "seed": 58,
+        "megapixels": 0.6,
+        "aspectRatio": "9:16 (Portrait Widescreen)"
+      }
+    },
+    {
+      "status": "passed",
+      "workflowId": "krea2-text",
+      "taskId": "e7c4dd2d-a066-4869-ac34-cd9feaf29fca",
+      "promptId": "a1dea00f-ca17-4652-ab60-7df2182e3619",
+      "bytes": 169546,
+      "submissions": 1,
+      "offlineReload": true,
+      "name": "Krea2 文生图",
+      "kind": "image",
+      "case": "2026-09-23T11-11-05-257Z-krea2-text",
+      "sha256": "e18a126266cf427ad7b0bc1a9d8a4b6d4b648ae21fddd7b89cd43cb878a93eea",
+      "parameters": {
+        "width": 512,
+        "height": 512,
+        "seed": 58,
+        "steps": 10,
+        "cfg": 1.2
+      }
+    },
+    {
+      "status": "passed",
+      "workflowId": "music3-song",
+      "taskId": "20f7a560-cbad-48e8-8157-e64a9d11e3da",
+      "promptId": "ab36e2cf-6f71-4786-8244-b8edfd194944",
+      "duration": 7.999274,
+      "bytes": 278718,
+      "submissions": 1,
+      "offlineReload": true,
+      "name": "Music3 音乐与歌曲",
+      "kind": "audio",
+      "case": "2026-09-23T11-11-47-154Z-music3-song",
+      "sha256": "9359078a997469461347ceddfb6b979428a7b5c022be18dda575bcd65fba7e35",
+      "parameters": {
+        "duration": 8,
+        "seed": 58,
+        "lyrics": "",
+        "tuning": "Fast Draft"
+      }
+    },
+    {
+      "status": "passed",
+      "workflowId": "preset-1-3",
+      "taskId": "43f66d79-8857-498f-8cb2-41cbc10e1f30",
+      "promptId": "47dcb8d6-f216-45f9-894f-0489d6d89266",
+      "duration": 5.167,
+      "bytes": 247343,
+      "submissions": 1,
+      "offlineReload": true,
+      "name": "H3 双图参考 · 4 步",
+      "kind": "video",
+      "case": "2026-09-23T11-12-35-981Z-preset-1-3",
+      "sha256": "3b53a0f91987cf00cae387063c7f74ce2b0a00bb8511d8793c21be5f64079f89",
+      "parameters": {
+        "duration": 5,
+        "seed": 58,
+        "megapixels": 0.6
+      }
+    },
+    {
+      "status": "passed",
+      "workflowId": "preset-0-0",
+      "taskId": "94cf36db-94df-45ca-a28e-4947c3ecf418",
+      "promptId": "2ca67738-26b8-4d91-b4d5-a01bec75637c",
+      "duration": 5.167,
+      "bytes": 311696,
+      "submissions": 1,
+      "offlineReload": true,
+      "name": "H3 文生视频 · 20 步",
+      "kind": "video",
+      "case": "2026-09-23T16-10-18-064Z-preset-0-0",
+      "sha256": "74658586011aae5bcf8c8686a92f09cf20d1796ea065d98f7e80e173629c4cf8",
+      "parameters": {
+        "duration": 5,
+        "seed": 58,
+        "megapixels": 0.6,
+        "aspectRatio": "9:16 (Portrait Widescreen)"
+      }
+    },
+    {
+      "status": "passed",
+      "workflowId": "preset-0-1",
+      "taskId": "5c9d49da-0bf0-4046-9c9c-a7c2bc3f7995",
+      "promptId": "bf903d83-718f-4fed-99c2-2fa796013b1d",
+      "duration": 5.167,
+      "bytes": 219733,
+      "submissions": 1,
+      "offlineReload": true,
+      "name": "H3 单图参考 · 20 步",
+      "kind": "video",
+      "case": "2026-09-23T16-12-42-905Z-preset-0-1",
+      "sha256": "99928c16298d71e84d1b68276f6cc04f0de5f5a3e664833e67c3cc8201620510",
+      "parameters": {
+        "duration": 5,
+        "seed": 58,
+        "megapixels": 0.6
+      }
+    },
+    {
+      "status": "passed",
+      "workflowId": "preset-0-2",
+      "taskId": "0c808284-4c88-4332-ac2c-868248922818",
+      "promptId": "69b014ba-0065-4794-9fdd-bfaf2fdbe855",
+      "duration": 5.167,
+      "bytes": 247511,
+      "submissions": 1,
+      "offlineReload": true,
+      "name": "H3 首尾帧视频 · 20 步",
+      "kind": "video",
+      "case": "2026-09-23T16-14-55-083Z-preset-0-2",
+      "sha256": "e7d44e41a4de16d56e288412582a2caf70d0dda74f0423d8ddedf947bed5aa26",
+      "parameters": {
+        "duration": 5,
+        "seed": 58,
+        "megapixels": 0.6,
+        "aspectRatio": "9:16 (Portrait Widescreen)"
+      }
+    },
+    {
+      "status": "passed",
+      "workflowId": "lyrics-prepare",
+      "taskId": "3e5405a1-429a-40fa-ac65-1f140d5cc1db",
+      "promptId": "30052415-303a-4a9c-a987-889c50d68fbb",
+      "bytes": 116,
+      "submissions": 1,
+      "offlineReload": true,
+      "name": "歌词整理",
+      "kind": "text",
+      "case": "2026-09-23T23-21-28-126Z-lyrics-prepare",
+      "sha256": "911a2e2ea7e4653d284238871d31b0697234e9a6ec425500734b561c87ae75e7",
+      "parameters": {
+        "headers": true,
+        "metadata": true,
+        "duration": 5,
+        "seed": 58,
+        "megapixels": 0.6
+      }
+    },
+    {
+      "status": "passed",
+      "workflowId": "preset-0-3",
+      "taskId": "4427082e-24f3-4459-aa7e-f32aa475ccd8",
+      "promptId": "5c51e6ec-0da6-4ba5-9dcd-0c59d5ca5227",
+      "duration": 5.167,
+      "bytes": 231622,
+      "submissions": 1,
+      "offlineReload": true,
+      "name": "H3 双图参考 · 20 步",
+      "kind": "video",
+      "case": "2026-09-23T23-21-39-372Z-preset-0-3",
+      "sha256": "38e3de7925620e9c4f0ddeec81a91f3f2fc09ecc0af25f0c0863b08edc2c3fb1",
+      "parameters": {
+        "duration": 5,
+        "seed": 58,
+        "megapixels": 0.6
+      }
+    },
+    {
+      "status": "passed",
+      "workflowId": "preset-0-4",
+      "taskId": "7b76cd8d-9650-4e31-b2f3-d1d259e1ab35",
+      "promptId": "a2e322dc-7a22-46fc-8428-7efc39fa4d31",
+      "duration": 5.167,
+      "bytes": 210063,
+      "submissions": 1,
+      "offlineReload": true,
+      "name": "H3 视频参考 · 20 步",
+      "kind": "video",
+      "case": "2026-09-23T23-24-41-726Z-preset-0-4",
+      "sha256": "af952365133ed8830cb8fb9a3e1165d07412ca98ccae63c28d76c19224892ba2",
+      "parameters": {
+        "duration": 5,
+        "seed": 58,
+        "megapixels": 0.6,
+        "aspectRatio": "9:16 (Portrait Widescreen)"
+      }
+    },
+    {
+      "status": "passed",
+      "workflowId": "h3-standard-first-frame",
+      "taskId": "5f75fbb3-0db0-4ff3-8659-921754673b5f",
+      "promptId": "fe46ea81-d89f-4bdb-a4d3-0762d03e5348",
+      "duration": 5.167,
+      "bytes": 248802,
+      "submissions": 1,
+      "offlineReload": true,
+      "name": "H3 首帧图生视频 · 20 步",
+      "kind": "video",
+      "case": "2026-09-23T23-31-09-245Z-h3-standard-first-frame",
+      "sha256": "19061705785a41e192164fd0e32b742a01ca9f26d47ca8fcddf1a47a934822c1",
+      "parameters": {
+        "duration": 5,
+        "seed": 58,
+        "megapixels": 0.6,
+        "aspectRatio": "9:16 (Portrait Widescreen)"
+      }
+    }
+  ],
+  "unsuccessful_runs": [
+    {
+      "case": "2026-09-23T11-08-00-479Z-krea2-text",
+      "workflowId": "krea2-text",
+      "promptId": "f155283e-0286-4712-8362-c0eae1b2b39b",
+      "status": "interrupted",
+      "error": "无法连接工作站，请检查服务地址、隧道或跨域设置。",
+      "details": "Failed to fetch"
+    },
+    {
+      "case": "2026-09-23T11-14-33-989Z-preset-0-0",
+      "workflowId": "preset-0-0",
+      "promptId": "c48c0951-7771-49b6-974e-00d296661d6c",
+      "status": "interrupted",
+      "error": "无法连接工作站，请检查服务地址、隧道或跨域设置。",
+      "details": "Failed to fetch"
+    }
+  ]
+}

@@ -1,0 +1,228 @@
+{
+  "high": {
+    "class_type": "UNETLoader",
+    "inputs": {
+      "unet_name": "wan2.2_bernini_r_high_noise_fp8_scaled.safetensors",
+      "weight_dtype": "default"
+    }
+  },
+  "low": {
+    "class_type": "UNETLoader",
+    "inputs": {
+      "unet_name": "wan2.2_bernini_r_low_noise_fp8_scaled.safetensors",
+      "weight_dtype": "default"
+    }
+  },
+  "clip": {
+    "class_type": "CLIPLoader",
+    "inputs": {
+      "clip_name": "umt5_xxl_fp8_e4m3fn_scaled.safetensors",
+      "type": "wan",
+      "device": "default"
+    }
+  },
+  "vae": {
+    "class_type": "VAELoader",
+    "inputs": {
+      "vae_name": "Wan2_1_VAE_bf16.safetensors"
+    }
+  },
+  "positive": {
+    "class_type": "CLIPTextEncode",
+    "inputs": {
+      "clip": [
+        "clip",
+        0
+      ],
+      "text": ""
+    }
+  },
+  "negative": {
+    "class_type": "CLIPTextEncode",
+    "inputs": {
+      "clip": [
+        "clip",
+        0
+      ],
+      "text": ""
+    }
+  },
+  "high_shift": {
+    "class_type": "ModelSamplingSD3",
+    "inputs": {
+      "model": [
+        "high_lora",
+        0
+      ],
+      "shift": 8
+    }
+  },
+  "low_shift": {
+    "class_type": "ModelSamplingSD3",
+    "inputs": {
+      "model": [
+        "low_lora",
+        0
+      ],
+      "shift": 8
+    }
+  },
+  "latent": {
+    "class_type": "WanFirstLastFrameToVideo",
+    "inputs": {
+      "positive": [
+        "positive",
+        0
+      ],
+      "negative": [
+        "negative",
+        0
+      ],
+      "vae": [
+        "vae",
+        0
+      ],
+      "width": 832,
+      "height": 480,
+      "length": 81,
+      "batch_size": 1,
+      "start_image": [
+        "first",
+        0
+      ],
+      "end_image": [
+        "last",
+        0
+      ]
+    }
+  },
+  "first_pass": {
+    "class_type": "KSamplerAdvanced",
+    "inputs": {
+      "model": [
+        "high_shift",
+        0
+      ],
+      "positive": [
+        "latent",
+        0
+      ],
+      "negative": [
+        "latent",
+        1
+      ],
+      "latent_image": [
+        "latent",
+        2
+      ],
+      "add_noise": "enable",
+      "noise_seed": 0,
+      "steps": 8,
+      "cfg": 1,
+      "sampler_name": "euler",
+      "scheduler": "simple",
+      "start_at_step": 0,
+      "end_at_step": 4,
+      "return_with_leftover_noise": "enable"
+    }
+  },
+  "second_pass": {
+    "class_type": "KSamplerAdvanced",
+    "inputs": {
+      "model": [
+        "low_shift",
+        0
+      ],
+      "positive": [
+        "latent",
+        0
+      ],
+      "negative": [
+        "latent",
+        1
+      ],
+      "latent_image": [
+        "first_pass",
+        0
+      ],
+      "add_noise": "disable",
+      "noise_seed": 0,
+      "steps": 8,
+      "cfg": 1,
+      "sampler_name": "euler",
+      "scheduler": "simple",
+      "start_at_step": 4,
+      "end_at_step": 8,
+      "return_with_leftover_noise": "disable"
+    }
+  },
+  "decode": {
+    "class_type": "VAEDecode",
+    "inputs": {
+      "samples": [
+        "second_pass",
+        0
+      ],
+      "vae": [
+        "vae",
+        0
+      ]
+    }
+  },
+  "video": {
+    "class_type": "CreateVideo",
+    "inputs": {
+      "images": [
+        "decode",
+        0
+      ],
+      "fps": 16
+    }
+  },
+  "save": {
+    "class_type": "SaveVideo",
+    "inputs": {
+      "video": [
+        "video",
+        0
+      ],
+      "filename_prefix": "canvas/wan",
+      "format": "auto",
+      "codec": "auto"
+    }
+  },
+  "high_lora": {
+    "class_type": "LoraLoaderModelOnly",
+    "inputs": {
+      "model": [
+        "high",
+        0
+      ],
+      "lora_name": "Bernini-R_LightX2V_high_noise.safetensors",
+      "strength_model": 1
+    }
+  },
+  "low_lora": {
+    "class_type": "LoraLoaderModelOnly",
+    "inputs": {
+      "model": [
+        "low",
+        0
+      ],
+      "lora_name": "Bernini-R_LightX2V_low_noise.safetensors",
+      "strength_model": 1
+    }
+  },
+  "first": {
+    "class_type": "LoadImage",
+    "inputs": {
+      "image": ""
+    }
+  },
+  "last": {
+    "class_type": "LoadImage",
+    "inputs": {
+      "image": ""
+    }
+  }
+}

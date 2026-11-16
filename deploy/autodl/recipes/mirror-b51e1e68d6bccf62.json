@@ -1,0 +1,166 @@
+{
+  "93": {
+    "class_type": "Text Multiline",
+    "inputs": {
+      "text": "A dramatic beauty headshot of a woman with rich cocoa-toned skin and golden-brown curls styled into an elegant updo. A bronze serpent is wrapped around her neck and loops through her hair like a piece of jewelry. The photo has a vibrant, matte color palette with gold and warm orange undertones. The background is softly blurred with subtle bokeh. Shot with a macro lens from a slightly high angle to emphasize her glowing skin and eyes."
+    },
+    "_meta": {
+      "title": "Shared Prompt"
+    }
+  },
+  "177": {
+    "class_type": "PreviewImage",
+    "inputs": {
+      "images": [
+        "192:147",
+        0
+      ]
+    },
+    "_meta": {
+      "title": "PreviewImage"
+    }
+  },
+  "193": {
+    "class_type": "VAELoader",
+    "inputs": {
+      "vae_name": "flux\\Flux_VAE.safetensors"
+    },
+    "_meta": {
+      "title": "VAELoader"
+    }
+  },
+  "192:140": {
+    "class_type": "ConditioningZeroOut",
+    "inputs": {
+      "conditioning": [
+        "192:148",
+        0
+      ]
+    },
+    "_meta": {
+      "title": "ConditioningZeroOut"
+    }
+  },
+  "192:142": {
+    "class_type": "PathchSageAttentionKJ",
+    "inputs": {
+      "sage_attention": "auto",
+      "allow_compile": false,
+      "model": [
+        "192:144",
+        0
+      ]
+    },
+    "_meta": {
+      "title": "PathchSageAttentionKJ"
+    }
+  },
+  "192:143": {
+    "class_type": "ModelPatchTorchSettings",
+    "inputs": {
+      "enable_fp16_accumulation": true,
+      "model": [
+        "192:142",
+        0
+      ]
+    },
+    "_meta": {
+      "title": "ModelPatchTorchSettings"
+    }
+  },
+  "192:144": {
+    "class_type": "UNETLoader",
+    "inputs": {
+      "unet_name": "flux\\flux1-krea-dev.safetensors",
+      "weight_dtype": "fp8_e4m3fn_fast"
+    },
+    "_meta": {
+      "title": "UNETLoader"
+    }
+  },
+  "192:146": {
+    "class_type": "KSampler",
+    "inputs": {
+      "seed": 40,
+      "steps": 20,
+      "cfg": 1,
+      "sampler_name": "euler",
+      "scheduler": "beta",
+      "denoise": 1,
+      "model": [
+        "192:143",
+        0
+      ],
+      "positive": [
+        "192:148",
+        0
+      ],
+      "negative": [
+        "192:140",
+        0
+      ],
+      "latent_image": [
+        "192:149",
+        0
+      ]
+    },
+    "_meta": {
+      "title": "KSampler"
+    }
+  },
+  "192:148": {
+    "class_type": "CLIPTextEncode",
+    "inputs": {
+      "text": [
+        "93",
+        0
+      ],
+      "clip": [
+        "192:145",
+        0
+      ]
+    },
+    "_meta": {
+      "title": "CLIPTextEncode"
+    }
+  },
+  "192:149": {
+    "class_type": "EmptyLatentImage",
+    "inputs": {
+      "width": 1024,
+      "height": 1024,
+      "batch_size": 1
+    },
+    "_meta": {
+      "title": "EmptyLatentImage"
+    }
+  },
+  "192:145": {
+    "class_type": "DualCLIPLoader",
+    "inputs": {
+      "clip_name1": "clip_l.safetensors",
+      "clip_name2": "t5xxl_fp16.safetensors",
+      "type": "flux",
+      "device": "default"
+    },
+    "_meta": {
+      "title": "DualCLIPLoader"
+    }
+  },
+  "192:147": {
+    "class_type": "VAEDecode",
+    "inputs": {
+      "samples": [
+        "192:146",
+        0
+      ],
+      "vae": [
+        "193",
+        0
+      ]
+    },
+    "_meta": {
+      "title": "VAEDecode"
+    }
+  }
+}

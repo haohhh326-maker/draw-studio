@@ -1,0 +1,198 @@
+{
+  "9": {
+    "class_type": "SaveImage",
+    "inputs": {
+      "filename_prefix": "zimage/zimage",
+      "images": [
+        "68:8",
+        0
+      ]
+    },
+    "_meta": {
+      "title": "SaveImage"
+    }
+  },
+  "192": {
+    "class_type": "LoadImage",
+    "inputs": {
+      "image": ""
+    },
+    "_meta": {
+      "title": "LoadImage"
+    }
+  },
+  "68:18": {
+    "class_type": "CLIPLoader",
+    "inputs": {
+      "clip_name": "qwen_3_4b.safetensors",
+      "type": "lumina2",
+      "device": "default"
+    },
+    "_meta": {
+      "title": "CLIPLoader"
+    }
+  },
+  "68:6": {
+    "class_type": "CLIPTextEncode",
+    "inputs": {
+      "text": "",
+      "clip": [
+        "68:18",
+        0
+      ]
+    },
+    "_meta": {
+      "title": "CLIP Text Encode (Positive Prompt)"
+    }
+  },
+  "68:7": {
+    "class_type": "CLIPTextEncode",
+    "inputs": {
+      "text": "bad hands, extra fingers, missing fingers, fused fingers, broken hands, mutant hands, twisted limbs, extra limbs, missing limbs, dimple ",
+      "clip": [
+        "68:18",
+        0
+      ]
+    },
+    "_meta": {
+      "title": "CLIP Text Encode (Negative Prompt)"
+    }
+  },
+  "68:85": {
+    "class_type": "KSamplerSelect",
+    "inputs": {
+      "sampler_name": "dpmpp_sde"
+    },
+    "_meta": {
+      "title": "KSamplerSelect"
+    }
+  },
+  "68:86": {
+    "class_type": "SamplerCustom",
+    "inputs": {
+      "add_noise": true,
+      "noise_seed": 500,
+      "cfg": 1,
+      "model": [
+        "68:16",
+        0
+      ],
+      "positive": [
+        "68:6",
+        0
+      ],
+      "negative": [
+        "68:7",
+        0
+      ],
+      "sampler": [
+        "68:85",
+        0
+      ],
+      "sigmas": [
+        "68:82",
+        0
+      ],
+      "latent_image": [
+        "68:98",
+        0
+      ]
+    },
+    "_meta": {
+      "title": "SamplerCustom"
+    }
+  },
+  "68:17": {
+    "class_type": "VAELoader",
+    "inputs": {
+      "vae_name": "flux\\Flux_VAE.safetensors"
+    },
+    "_meta": {
+      "title": "VAELoader"
+    }
+  },
+  "68:16": {
+    "class_type": "UNETLoader",
+    "inputs": {
+      "unet_name": "z_image_turbo_bf16.safetensors",
+      "weight_dtype": "default"
+    },
+    "_meta": {
+      "title": "UNETLoader"
+    }
+  },
+  "68:8": {
+    "class_type": "VAEDecode",
+    "inputs": {
+      "samples": [
+        "68:86",
+        0
+      ],
+      "vae": [
+        "68:17",
+        0
+      ]
+    },
+    "_meta": {
+      "title": "VAEDecode"
+    }
+  },
+  "68:82": {
+    "class_type": "FlowMatchEulerDiscreteScheduler (Custom)",
+    "inputs": {
+      "steps": 10,
+      "start_at_step": 5,
+      "end_at_step": 10,
+      "base_image_seq_len": 256,
+      "base_shift": 0.5,
+      "invert_sigmas": "disable",
+      "max_image_seq_len": 8192,
+      "max_shift": 1.15,
+      "num_train_timesteps": 1000,
+      "shift": 3,
+      "shift_terminal": 0,
+      "stochastic_sampling": "disable",
+      "time_shift_type": "exponential",
+      "use_beta_sigmas": "disable",
+      "use_dynamic_shifting": "disable",
+      "use_exponential_sigmas": "disable",
+      "use_karras_sigmas": "disable",
+      "device": "cuda"
+    },
+    "_meta": {
+      "title": "FlowMatchEulerDiscreteScheduler (Custom)"
+    }
+  },
+  "68:95": {
+    "class_type": "VAEEncode",
+    "inputs": {
+      "pixels": [
+        "192",
+        0
+      ],
+      "vae": [
+        "68:17",
+        0
+      ]
+    },
+    "_meta": {
+      "title": "VAEEncode"
+    }
+  },
+  "68:98": {
+    "class_type": "LatentUpscale",
+    "inputs": {
+      "upscale_method": "nearest-exact",
+      "width": 2048,
+      "height": 2048,
+      "crop": "center",
+      "samples": [
+        "68:95",
+        0
+      ]
+    },
+    "_meta": {
+      "title": "LatentUpscale"
+    }
+  }
+}

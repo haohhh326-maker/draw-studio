@@ -1,0 +1,224 @@
+{
+  "1": {
+    "class_type": "UNETLoader",
+    "inputs": {
+      "unet_name": "minimax_music3_dit_fp16.safetensors",
+      "weight_dtype": "default"
+    },
+    "_meta": {
+      "title": "1. Load MiniMax Music3 Diffusion Model"
+    }
+  },
+  "2": {
+    "class_type": "CLIPLoader",
+    "inputs": {
+      "clip_name": "minimax_music3_text_encoder_pruned_int8_convrot.safetensors",
+      "type": "minimax",
+      "device": "default"
+    },
+    "_meta": {
+      "title": "2. Load MiniMax Music3 Text/AR Model"
+    }
+  },
+  "3": {
+    "class_type": "VAELoader",
+    "inputs": {
+      "vae_name": "minimax_music3_dav.safetensors"
+    },
+    "_meta": {
+      "title": "3. Load MiniMax Music3 Audio VAE"
+    }
+  },
+  "4": {
+    "class_type": "VRGDG_Music3PromptBuilder",
+    "inputs": {
+      "preset": "Raw 90s Alternative Rock",
+      "vocal_profile": "Use Style Default",
+      "singer_name": "solo alternative-rock lead vocalist",
+      "style_name": "raw '90s alternative rock style",
+      "genre_subgenre": "raw 1990s alternative rock and post-grunge",
+      "mood_themes": "restless, candid, defiant, emotionally direct",
+      "instruments": "dry electric guitar, live drums, melodic electric bass, restrained acoustic guitar, noisy guitar lift in choruses",
+      "vocal_qualities": "conversational rock vocal, natural phrasing, controlled rasp, forceful chorus",
+      "production": "live-room energy, imperfect timing, moderate stereo width, minimal polish",
+      "tempo_range": "mid-tempo rock groove",
+      "song_arc": "contained verse growing into a loud cathartic chorus",
+      "avoid_characteristics": "EDM synths, trap drums, glossy pop vocal stacks, brick-wall limiting",
+      "extra_direction": ""
+    },
+    "_meta": {
+      "title": "Caption Builder — Preset + Editable Style Details"
+    }
+  },
+  "5": {
+    "class_type": "VRGDG_Music3LyricsPrepare",
+    "inputs": {
+      "lyrics": "[Verse 1]\nI keep the porch light burning\nFor a version of me that left\nI hear the screen door talking\nLike it knows what I forget\n\n[Pre-Chorus]\nI could call it patience\nI could call it what it is\n\n[Chorus]\nI am done waiting in the doorway\nDone making silence sound like love\nIf the night wants something from me\nIt has already taken enough\n\n[Verse 2]\nThe kitchen clock keeps lying\nSays the morning is on time\n\n[Bridge]\nLet the walls remember everything\nI do not need to carry it\n\n[Final Chorus]\nI am done waiting in the doorway\nI am walking out because I can\n\n[Outro]\nBecause I can\nBecause I can",
+      "normalise_headers": true,
+      "remove_metadata_lines": true
+    },
+    "_meta": {
+      "title": "Lyrics — Paste New Song Here"
+    }
+  },
+  "6": {
+    "class_type": "VRGDG_Music3TuningPreset",
+    "inputs": {
+      "preset": "Balanced Quality"
+    },
+    "_meta": {
+      "title": "Coordinated Tuning Preset"
+    }
+  },
+  "7": {
+    "class_type": "MiniMaxMusic3TextEncode",
+    "inputs": {
+      "caption": [
+        "4",
+        0
+      ],
+      "lyrics": [
+        "5",
+        0
+      ],
+      "seed": [
+        "15",
+        0
+      ],
+      "max_duration": 120,
+      "cfg_scale": [
+        "6",
+        0
+      ],
+      "top_k": [
+        "6",
+        1
+      ],
+      "clip": [
+        "2",
+        0
+      ]
+    },
+    "_meta": {
+      "title": "AR Acoustic Plan — Caption + Lyrics → Hidden Music Plan"
+    }
+  },
+  "8": {
+    "class_type": "VRGDG_Music3ConditioningStrength",
+    "inputs": {
+      "strength": [
+        "6",
+        4
+      ],
+      "conditioning": [
+        "7",
+        0
+      ]
+    },
+    "_meta": {
+      "title": "Direct Acoustic-Plan Strength (1.0 = Native)"
+    }
+  },
+  "9": {
+    "class_type": "EmptyMiniMaxMusic3LatentAudio",
+    "inputs": {
+      "seconds": [
+        "7",
+        1
+      ],
+      "batch_size": 1
+    },
+    "_meta": {
+      "title": "Create Latent at AR-Selected Duration"
+    }
+  },
+  "10": {
+    "class_type": "ConditioningZeroOut",
+    "inputs": {
+      "conditioning": [
+        "8",
+        0
+      ]
+    },
+    "_meta": {
+      "title": "Required Zero Baseline for Diffusion CFG"
+    }
+  },
+  "11": {
+    "class_type": "KSampler",
+    "inputs": {
+      "seed": [
+        "15",
+        0
+      ],
+      "steps": [
+        "6",
+        3
+      ],
+      "cfg": [
+        "6",
+        2
+      ],
+      "sampler_name": "euler",
+      "scheduler": "simple",
+      "denoise": 1,
+      "model": [
+        "1",
+        0
+      ],
+      "positive": [
+        "8",
+        0
+      ],
+      "negative": [
+        "10",
+        0
+      ],
+      "latent_image": [
+        "9",
+        0
+      ]
+    },
+    "_meta": {
+      "title": "Diffusion Renderer — Keep Sampler/Seed Fixed for A/B Tests"
+    }
+  },
+  "12": {
+    "class_type": "VAEDecodeAudio",
+    "inputs": {
+      "samples": [
+        "11",
+        0
+      ],
+      "vae": [
+        "3",
+        0
+      ]
+    },
+    "_meta": {
+      "title": "Decode Music3 Latent to Audio"
+    }
+  },
+  "13": {
+    "class_type": "PreviewAudio",
+    "inputs": {
+      "audio": [
+        "12",
+        0
+      ]
+    },
+    "_meta": {
+      "title": "Listen Here"
+    }
+  },
+  "15": {
+    "class_type": "VRGDG_Music3SeedBank",
+    "inputs": {
+      "base_seed": 1000,
+      "spacing": 101
+    },
+    "_meta": {
+      "title": "Repeatable Seeds — A Feeds Both Stages"
+    }
+  }
+}

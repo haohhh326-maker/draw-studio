@@ -1,0 +1,19 @@
+{
+  "prepare": {
+    "class_type": "VRGDG_Music3LyricsPrepare",
+    "inputs": {
+      "lyrics": "",
+      "normalise_headers": true,
+      "remove_metadata_lines": true
+    }
+  },
+  "text": {
+    "class_type": "VRGDG_ShowText",
+    "inputs": {
+      "text": [
+        "prepare",
+        0
+      ]
+    }
+  }
+}

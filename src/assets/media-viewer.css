@@ -1,0 +1,129 @@
+.media-viewport {
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+  position: relative;
+  touch-action: none;
+}
+.media-viewport.is-zoomed { cursor: grab; }
+.media-viewport.is-panning { cursor: grabbing; }
+.media-viewport-content {
+  width: 100%;
+  height: 100%;
+  transform-origin: 0 0;
+}
+.media-viewport-content > img,
+.media-viewport-content > video {
+  width: 100%;
+  height: 100%;
+  display: block;
+  object-fit: contain;
+  user-select: none;
+  -webkit-user-drag: none;
+}
+.media-viewer-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 4000;
+  display: grid;
+  place-items: center;
+  padding: 24px;
+  background: color-mix(in srgb, var(--canvas-background) 93%, transparent);
+}
+.media-viewer {
+  font-family: var(--font-ui);
+  font-size: var(--font-size-body);
+  line-height: var(--line-height-body);
+  position: relative;
+  width: min(1200px, calc(100vw - 48px));
+  height: min(850px, calc(100dvh - 48px));
+  border: 1px solid var(--surface-border);
+  border-radius: 14px;
+  background: var(--canvas-background);
+  box-shadow: 0 25px 95px #0008;
+  overflow: hidden;
+  color: var(--text);
+}
+.media-viewer.is-fullscreen,
+.media-viewer:fullscreen {
+  width: 100vw;
+  height: 100dvh;
+  border: 0;
+  border-radius: 0;
+}
+.media-viewer.is-fullscreen { position: fixed; inset: 0; }
+.media-viewer.is-video {
+  display: grid;
+  grid-template-rows: minmax(0, 1fr) auto;
+}
+.media-viewer-stage { min-height: 0; min-width: 0; background: var(--canvas-background); }
+.media-viewer.is-video .media-viewer-stage { grid-row: 1; }
+.media-viewer .media-viewer-icon {
+  display: grid;
+  place-items: center;
+  width: 36px;
+  height: 36px;
+  padding: 0;
+  border: 1px solid var(--surface-border);
+  border-radius: 8px;
+  background: var(--surface-veil);
+  color: var(--text);
+  cursor: pointer;
+  text-decoration: none;
+  font: var(--font-weight-semibold) var(--font-size-body)/1 var(--font-ui);
+  flex-shrink: 0;
+}
+.media-viewer .media-viewer-icon:hover,
+.media-viewer .media-viewer-icon.is-active { background: var(--surface-hover); border-color: var(--border-strong); }
+.media-viewer .media-viewer-icon:disabled { opacity: .45; cursor: wait; }
+.media-viewer .media-viewer-icon:focus-visible,
+.media-viewer-progress:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
+.media-viewer-close { position: absolute; right: 14px; top: 14px; z-index: 2; }
+.media-viewer-crop { position: absolute; right: 58px; top: 14px; z-index: 2; }
+.media-viewer-fullscreen { position: absolute; right: 14px; bottom: 14px; z-index: 2; }
+.media-viewer.is-video .media-viewer-fullscreen { position: static; }
+.media-viewer-frames { position: absolute; top: 14px; left: 14px; display: flex; gap: 8px; z-index: 2; }
+.media-viewer-controls {
+  grid-row: 2;
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto auto auto;
+  align-items: center;
+  gap: 9px;
+  padding: 10px 14px;
+  border-top: 1px solid var(--surface-border);
+  background: var(--surface);
+  z-index: 2;
+  color-scheme: dark;
+}
+.media-viewer-progress { width: 100%; min-width: 0; margin: 0; cursor: pointer; accent-color: var(--accent); }
+.media-viewer-menu-anchor { position: relative; flex-shrink: 0; }
+.media-viewer-menu {
+  grid-column: 1 / -1;
+  justify-self: end;
+  display: flex;
+  gap: 7px;
+  padding: 9px;
+  border: 1px solid var(--surface-border);
+  border-radius: 10px;
+  background: var(--surface-raised);
+  box-shadow: 0 8px 24px #0006;
+}
+.media-viewer-loading {
+  position: absolute;
+  left: calc(50% - 13px);
+  top: calc(50% - 13px);
+  width: 26px;
+  height: 26px;
+  border: 2px solid var(--surface-border);
+  border-top-color: var(--accent);
+  border-radius: 50%;
+  animation: media-viewer-spin 800ms linear infinite;
+}
+@keyframes media-viewer-spin { to { transform: rotate(360deg); } }
+@media (max-width: 600px) {
+  .media-viewer-overlay { padding: 10px; }
+  .media-viewer { width: calc(100vw - 20px); height: calc(100dvh - 20px); }
+  .media-viewer-controls { gap: 5px; padding: 8px 10px; }
+  .media-viewer .media-viewer-icon { width: 32px; height: 32px; }
+}
+@media (prefers-reduced-motion: reduce) { .media-viewer-loading { animation: none; } }

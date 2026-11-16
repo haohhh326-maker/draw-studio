@@ -1,0 +1,6 @@
+.top-actions .memory-cleanup-button { color: var(--muted); background: transparent; }
+.top-actions .memory-cleanup-button:hover:not(:disabled) { color: var(--text); background: transparent; }
+.top-actions .memory-cleanup-button:disabled { opacity: .4; cursor: not-allowed; }
+.memory-cleanup-spinner { animation: memory-cleanup-spin 1s linear infinite; }
+@keyframes memory-cleanup-spin { to { transform: rotate(360deg); } }
+@media (prefers-reduced-motion: reduce) { .memory-cleanup-spinner { animation-duration: 2s; } }

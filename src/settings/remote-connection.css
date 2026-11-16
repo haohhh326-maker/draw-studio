@@ -1,0 +1,10 @@
+.remote-connection-control { align-items: center; gap: 4px; flex-shrink: 0; }
+.remote-connection-control .remote-address-button { width: 32px; height: 34px; padding: 6px; color: #ee827a; background: transparent; border: 0; }
+.remote-connection-control .remote-address-button.offline { color: #ee827a; }
+.remote-connection-control .remote-address-button.connected { color: #64d8c9; }
+.remote-connection-control .remote-address-button.connecting { color: #e8c881; }
+.remote-connection-control .remote-address-button:hover, .remote-connection-control .remote-address-button[aria-expanded="true"] { background: var(--surface-hover); }
+.connection-popover .connection-check-button.connected { color: #64d8c9; }
+.connection-popover .connection-check-button.offline { color: #ee827a; }
+.connection-popover .connection-address-input input { padding-right: 11px; }
+@media (max-width: 1200px) { .remote-connection-control .remote-address-button { width: 29px; height: 32px; } }

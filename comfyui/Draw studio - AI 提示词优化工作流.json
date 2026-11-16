@@ -1,0 +1,37 @@
+{
+  "last_node_id": 1,
+  "last_link_id": 0,
+  "nodes": [
+    {
+      "id": 1,
+      "type": "DrawStudioPromptOptimizer",
+      "pos": [120, 100],
+      "size": [560, 650],
+      "flags": {},
+      "order": 0,
+      "mode": 0,
+      "inputs": [
+        {"name": "images", "type": "IMAGE", "link": null}
+      ],
+      "outputs": [{"name": "optimized_prompt", "type": "STRING", "links": null, "slot_index": 0}],
+      "title": "AI 提示词优化（只输出提示词）",
+      "properties": {"Node name for S&R": "DrawStudioPromptOptimizer"},
+      "widgets_values": [
+        "让人物向前走，镜头跟随。",
+        "Qwen3.8-27B-UD-Q2_K_XL.gguf",
+        "中文",
+        "cuda",
+        "保留用户核心意图；动作与镜头应合理、连贯。",
+        "mmproj-Qwen3.8-27B-F16.gguf",
+        "[]",
+        "{\"model\":\"MiniMax H3\",\"workflow\":\"多图参考视频\",\"kind\":\"video\",\"mode\":\"multi-reference\",\"readMedia\":true}",
+        4096
+      ]
+    }
+  ],
+  "links": [],
+  "groups": [],
+  "config": {},
+  "extra": {"ds": {"scale": 1, "offset": [30, 20]}},
+  "version": 0.4
+}

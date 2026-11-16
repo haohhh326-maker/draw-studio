@@ -1,0 +1,295 @@
+{
+  "71": {
+    "class_type": "VRGDG_PythonCodeRunner",
+    "inputs": {
+      "python_code": "# ---------- CLEAN JSON WRAPPERS ----------\n# removes ```json fences and ensures valid {}\n# input variable assumed: input_text\n\ntext = input_text.replace(\"```json\", \"\").replace(\"```\", \"\").strip()\n\n\n# ---------- ENSURE BRACES ----------\nif not text.startswith(\"{\"):\n    text = \"{\\n\" + text\n\nif not text.endswith(\"}\"):\n    text = text + \"\\n}\"\n\n\n# ---------- OUTPUT ----------\nresult = text",
+      "input_text": [
+        "28:110",
+        0
+      ]
+    },
+    "_meta": {
+      "title": "json format fixer"
+    }
+  },
+  "88": {
+    "class_type": "VRGDG_SaveTextAdvanced",
+    "inputs": {
+      "folder_name": "lyricsegments",
+      "file_name": "lyricsegments",
+      "overwrite": true,
+      "trigger": [
+        "120",
+        0
+      ],
+      "text": [
+        "71",
+        0
+      ]
+    },
+    "_meta": {
+      "title": "VRGDG_SaveTextAdvanced"
+    }
+  },
+  "120": {
+    "class_type": "PrimitiveInt",
+    "inputs": {
+      "value": -1047514739705542
+    },
+    "_meta": {
+      "title": "PrimitiveInt"
+    }
+  },
+  "212": {
+    "class_type": "VRGDG_ShowText",
+    "inputs": {
+      "text": [
+        "88",
+        0
+      ]
+    },
+    "_meta": {
+      "title": "VRGDG_ShowText"
+    }
+  },
+  "798": {
+    "class_type": "VRGDG_LoadTextAdvanced",
+    "inputs": {
+      "folder_name": "fulllyrics",
+      "use_most_recent": true,
+      "text_file": "full_lyrics.txt",
+      "folder_name_override": "fulllyrics",
+      "use_custom_base_path": null,
+      "custom_base_path": ""
+    },
+    "_meta": {
+      "title": "FULL LYRICS"
+    }
+  },
+  "790:784": {
+    "class_type": "VHS_LoadAudio",
+    "inputs": {
+      "audio_file": [
+        "790:783:39",
+        0
+      ],
+      "seek_seconds": 0,
+      "duration": 0
+    },
+    "_meta": {
+      "title": "VHS_LoadAudio"
+    }
+  },
+  "790:783:35": {
+    "class_type": "PrimitiveInt",
+    "inputs": {
+      "value": 202967408536636
+    },
+    "_meta": {
+      "title": "PrimitiveInt"
+    }
+  },
+  "790:783:39": {
+    "class_type": "VRGDG_LoadAudioFilePath",
+    "inputs": {
+      "refresh": [
+        "790:783:35",
+        0
+      ]
+    },
+    "_meta": {
+      "title": "VRGDG_LoadAudioFilePath"
+    }
+  },
+  "790:787": {
+    "class_type": "VRGDG_IntToString",
+    "inputs": {
+      "value": [
+        "790:789",
+        0
+      ]
+    },
+    "_meta": {
+      "title": "VRGDG_IntToString"
+    }
+  },
+  "790:789": {
+    "class_type": "PrimitiveInt",
+    "inputs": {
+      "value": 192
+    },
+    "_meta": {
+      "title": "PrimitiveInt"
+    }
+  },
+  "790:788": {
+    "class_type": "StringConcatenate",
+    "inputs": {
+      "string_a": [
+        "790:783:39",
+        1
+      ],
+      "string_b": [
+        "790:787",
+        0
+      ],
+      "delimiter": "_"
+    },
+    "_meta": {
+      "title": "StringConcatenate"
+    }
+  },
+  "28:66": {
+    "class_type": "GeminiNode",
+    "inputs": {
+      "prompt": [
+        "28:849",
+        0
+      ],
+      "model": "gemini-2.5-flash",
+      "seed": 2,
+      "system_prompt": ""
+    },
+    "_meta": {
+      "title": "Step1:Wan Humo Lyric segment typo fixer"
+    }
+  },
+  "28:111": {
+    "class_type": "VRGDG_PythonCodeRunner",
+    "inputs": {
+      "python_code": "\n\ntext = input_text.strip()\n\n# remove markdown fences\ntext = text.replace(\"```json\", \"\").replace(\"```\", \"\")\n\n# remove everything before first segment (segment OR lyricSegment)\nm = re.search(r'\"(?:lyric)?segment\\d+\"', text, re.I)\nif m:\n    text = text[m.start():]\n\n# remove trailing notes/explanations\ntext = re.sub(r\"\\nNote:.*$\", \"\", text, flags=re.I | re.S)\n\nlines = text.splitlines()\nfixed = []\n\nfor line in lines:\n    line = line.strip()\n    if not line:\n        continue\n\n    m = re.match(r'\"((?:lyric)?segment\\d+)\"\\s*:\\s*(.*)', line, re.I)\n    if not m:\n        continue\n\n    key, val = m.groups()\n\n    # normalize lyricSegment -> Segment\n    key = re.sub(r'^lyric(segment\\d+)$', r'\\1', key, flags=re.I)\n\n    # remove trailing commas\n    val = val.rstrip(\",\")\n\n    # unwrap quotes if present\n    if val.startswith('\"') and val.endswith('\"'):\n        val = val[1:-1]\n\n    # escape JSON chars\n    val = val.replace(\"\\\\\", \"\\\\\\\\\")\n    val = val.replace('\"', '\\\\\"')\n\n    fixed.append(f'\"{key}\": \"{val}\"')\n\n# rebuild valid JSON\nresult = \"{\\n\" + \",\\n\".join(fixed) + \"\\n}\"",
+      "input_text": [
+        "28:66",
+        0
+      ]
+    },
+    "_meta": {
+      "title": "json format fixer"
+    }
+  },
+  "28:114": {
+    "class_type": "VRGDG_GetStems",
+    "inputs": {
+      "model_name": "htdemucs_ft",
+      "device": "auto",
+      "audio_file_path": "",
+      "audio": [
+        "790:784",
+        0
+      ]
+    },
+    "_meta": {
+      "title": "VRGDG_GetStems"
+    }
+  },
+  "28:80": {
+    "class_type": "BeatSceneDurationNode",
+    "inputs": {
+      "beat_data": [
+        "28:82",
+        0
+      ],
+      "min_duration": 1,
+      "max_duration": 8,
+      "bias": 0.5,
+      "duration_preset": "impact_weighted",
+      "seed": 1,
+      "output_filename": [
+        "790:788",
+        0
+      ]
+    },
+    "_meta": {
+      "title": "BeatSceneDurationNode"
+    }
+  },
+  "28:82": {
+    "class_type": "BeatImpactAnalysisNode",
+    "inputs": {
+      "final_mix": [
+        "790:784",
+        0
+      ],
+      "drums": [
+        "28:114",
+        1
+      ],
+      "bass": [
+        "28:114",
+        2
+      ],
+      "vocals": [
+        "28:114",
+        0
+      ],
+      "other": [
+        "28:114",
+        3
+      ]
+    },
+    "_meta": {
+      "title": "BeatImpactAnalysisNode"
+    }
+  },
+  "28:79": {
+    "class_type": "VRGDG_ManualLyricsExtractor_SRT",
+    "inputs": {
+      "srt_path": [
+        "28:80",
+        1
+      ],
+      "fps": 25,
+      "scene_duration_seconds": 4,
+      "use_ltx2": false,
+      "language": "english",
+      "audio": [
+        "28:114",
+        0
+      ]
+    },
+    "_meta": {
+      "title": "VRGDG_ManualLyricsExtractor_SRT"
+    }
+  },
+  "28:110": {
+    "class_type": "VRGDG_PythonCodeRunner",
+    "inputs": {
+      "python_code": "\n\n# ---------- EXTRACT SEGMENTS ----------\ndata = json.loads(input_json)\n\nsegments = [\n    (k, v.replace('\\\\\"', '\"'))\n    for k, v in data.items()\n    if re.match(r\"segment\\d+\", k, re.I)\n]\n\n\n# ---------- PARSE SRT ----------\ndef to_seconds(ts):\n    h, m, s_ms = ts.split(\":\")\n    s, ms = s_ms.split(\",\")\n    return int(h)*3600 + int(m)*60 + int(s) + int(ms)/1000.0\n\n\ntimes = re.findall(\n    r\"(\\d{2}:\\d{2}:\\d{2},\\d{3})\\s*-->\\s*(\\d{2}:\\d{2}:\\d{2},\\d{3})\",\n    input_text\n)\n\ndurations = [round(to_seconds(e)-to_seconds(s), 3) for s, e in times]\n\n\n# ---------- BUILD OUTPUT ----------\nlines = [\"{\"]\n\nfor i, (seg, txt) in enumerate(segments):\n    dur = durations[i] if i < len(durations) else 0.0\n    comma = \",\" if i < len(segments) - 1 else \"\"\n    lines.append(f'  \"{seg}_Duration_{dur:.3f}\": \"{txt}\"{comma}')\n\nlines.append(\"}\")\n\nresult = \"\\n\".join(lines)",
+      "input_text": [
+        "28:80",
+        0
+      ],
+      "input_json": [
+        "28:111",
+        1
+      ]
+    },
+    "_meta": {
+      "title": "lyric and srt duration merger"
+    }
+  },
+  "28:849": {
+    "class_type": "VRGDG_PromptTemplateBuilder",
+    "inputs": {
+      "section_1_type": "Instructions",
+      "section_1_text": "🎯 Whisper Transcription Correction Guidelines \nALIGNMENT RULES\n\nThere are exactly [N] input segments – return exactly [N] corrected segments.\n\nEach output segment number must match the same input segment number.\n\nExample: corrections for segment5 must appear only in segment5.\n\nNever move, merge, skip, or reorder segments.\n\nNever transfer words between segments.\n\nEach segment corresponds to a fixed 4-second time window — timing and numbering must remain locked.\n\nCORRECTION BEHAVIOR\n\nFix typos, misheard words, capitalization, and small grammatical issues using the reference lyrics as a guide.\n\nKeep the meaning, tone, and mood consistent with that segment’s place in the song.\n\nDo not replace a segment with a lyric line from another part of the song.\n\nDo not shorten or simplify lines unnecessarily; maintain natural phrasing.\n\n🔁 SHORT SEGMENT EXPANSION RULE (MANDATORY)\n\nIf a segment has fewer than 3 words, you must expand it. You are not allowed to return a single-word or two-word result unless that’s all the singer audibly performs and it cannot be naturally extended.\n\nIf it belongs to a lyric line:\n\nAdd nearby or missing words from that same lyric line in the reference lyrics to make it a natural, complete phrase.\n\nIf it’s part of a vocal or instrumental section:\n\nCreate a short lyrical phrase (3–7 words) that fits the song’s mood, tone, and emotional context.\n\nThis phrase should feel like a believable sung or whispered line that could exist in the same section — not random syllables or filler.\n\nExample:\n\nInstead of \"you\", write \"you fade through the static\".  but make sure you keep it consistent with the rest of the song!\n\nInstead of \"ah\", write \"ah, I’m glowing through the night\". but make sure you keep it consistent with the rest of the song!\n\nIf there is one word in a lyric segment, always expand it to be at least 5 words!!!\n\nThe invented phrase must:\n\nSound authentic and stylistically consistent with the song’s theme.\n\nAvoid generic filler (no “oh yeah,” “hmm,” “la la”).\n\nStay within the time feel of a 4-second window — short, lyrical, musical.\n\nIf still too short, repeat or slightly extend its own phrase to make it musically natural (e.g., \"you fade, fade with me\").\n\nCAPITALIZATION & PUNCTUATION RULE\n\nMatch the style and punctuation of the reference lyrics.\n\nLowercase mid-line; capitalize new sentences or new lyric sections.\n\nUse commas/periods only where musically natural.\n\nOUTPUT FORMAT\n\nReturn only valid JSON in a code block!\nExample Input:\n\nsegment1: \"the women who was\"\nsegment2: \"falling down a hole\"\nsegment3: \"into a tunnel in a city\"\nSegment4: \"yeah\"\n\n\nReference Lyrics:\n\nA woman was falling down a huge hole that it's a tunnel in the city, yeah\n\n\nCorrect Output:\n\n{\n  \"segment1\":(Intro) \"A woman was\",\n  \"segment2\": (verse)\"falling down a huge hole\",\n  \"segment3\": (Chorus)\"that it's a tunnel in the city\"\n  \"segment4\": (Bridge) \"she is falling, she is falling through\"\n}\nEach output segment must begin with the structure label for that segment you can find in the full lyrics that are sent over.\nThe label must be wrapped in parentheses.\nThe model is allowed to infer the correct structure label for each segment by matching it to the reference lyrics\n\nJSON RULES\n\nUse double quotes for all keys and values.\n\nPut the json in a code block\n\nNo trailing commas.\n\nOutput must include exactly [N] segments, matching input numbering (\"segment1\", \"segment2\", etc.).\n\nTL;DR\n\n✅ Keep timing and numbering locked.\n✅ Fix only within the segment’s own text.\n✅ Mandatory: expand any segment under 3 words into a short, natural lyrical phrase (3–7 words).\n✅ Stay consistent with mood and tone — no random filler.\n✅ Output clean, valid JSON only. In a code block for easy copy paste!!!\nDO NOT PUT LYRICSEGMENT MUST JUST BE SEGMENT!\n\n\n\n",
+      "section_2_type": "Other Notes",
+      "section_2_text": [
+        "798",
+        0
+      ],
+      "section_3_type": "Lyric Segment",
+      "section_3_text": [
+        "28:79",
+        0
+      ],
+      "section_4_type": "Ideas",
+      "section_4_text": "",
+      "section_5_type": "Other Notes",
+      "section_5_text": ""
+    },
+    "_meta": {
+      "title": "VRGDG_PromptTemplateBuilder"
+    }
+  }
+}

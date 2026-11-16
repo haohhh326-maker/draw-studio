@@ -1,0 +1,238 @@
+[
+  {
+    "path": "models/vae/Wan2_1_VAE_bf16.safetensors",
+    "size": 253806278
+  },
+  {
+    "path": "models/vae/ae.safetensors",
+    "size": 335304388
+  },
+  {
+    "path": "models/vae/flux2-vae.safetensors",
+    "size": 336213556
+  },
+  {
+    "path": "models/vae/minimax_h3_audio_vae_fp32.safetensors",
+    "size": 605254808
+  },
+  {
+    "path": "models/vae/minimax_h3_video_vae_fp16.safetensors",
+    "size": 5207808496
+  },
+  {
+    "path": "models/vae/minimax_music3_dav.safetensors",
+    "size": 216696128
+  },
+  {
+    "path": "models/vae/qwen_image_vae.safetensors",
+    "size": 253806246
+  },
+  {
+    "path": "models/vae/seedvr2_ema_vae_fp16.safetensors",
+    "size": 501324814
+  },
+  {
+    "path": "models/SEEDVR2/ema_vae_fp16.safetensors",
+    "size": 501324814
+  },
+  {
+    "path": "models/SEEDVR2/seedvr2_ema_7b_fp16.safetensors",
+    "size": 16479334424
+  },
+  {
+    "path": "models/voxcpm/speech_zipenhancer_ans_multiloss_16k_base/onnx_model.onnx",
+    "size": 9805700
+  },
+  {
+    "path": "models/voxcpm/speech_zipenhancer_ans_multiloss_16k_base/pytorch_model.bin",
+    "size": 8424575
+  },
+  {
+    "path": "models/voxcpm/VoxCPM2/audiovae.pth",
+    "size": 376951122
+  },
+  {
+    "path": "models/voxcpm/VoxCPM2/model.safetensors",
+    "size": 4580080592
+  },
+  {
+    "path": "models/loras/Bernini-R_LightX2V_high_noise.safetensors",
+    "size": 1244141856
+  },
+  {
+    "path": "models/loras/Bernini-R_LightX2V_low_noise.safetensors",
+    "size": 1244141856
+  },
+  {
+    "path": "models/loras/Kook_Zimage_瑶光.safetensors",
+    "size": 317580200
+  },
+  {
+    "path": "models/loras/Qwen-Image-Edit-2511-Lightning-4steps-V1.0-bf16.safetensors",
+    "size": 849608296
+  },
+  {
+    "path": "models/loras/h3-realism-people-t2v-i2v-r2v.safetensors",
+    "size": 131229656
+  },
+  {
+    "path": "models/loras/krea2-Cc-Ins风-人像.safetensors",
+    "size": 342878264
+  },
+  {
+    "path": "models/loras/krea2-Cc-MJ-影视柔光.safetensors",
+    "size": 228616016
+  },
+  {
+    "path": "models/loras/krea2-Cc-MJ-风格滤镜.safetensors",
+    "size": 342878264
+  },
+  {
+    "path": "models/loras/krea2-Cc-天魔-身材.safetensors",
+    "size": 228616016
+  },
+  {
+    "path": "models/loras/krea2-Cc风情万种-人像.safetensors",
+    "size": 342878264
+  },
+  {
+    "path": "models/loras/krea2-Cc风情万种-风格.safetensors",
+    "size": 229932352
+  },
+  {
+    "path": "models/loras/lightx2v_T2V_14B_cfg_step_distill_v2_lora_rank64_bf16.safetensors",
+    "size": 630697104
+  },
+  {
+    "path": "models/loras/minimax_h3_fl2v_turbo_8step_v1.0_comfyui_bf16.safetensors",
+    "size": 1956193000
+  },
+  {
+    "path": "models/loras/minimax_h3_ref2v_turbo_4step_v0.1_comfyui_bf16.safetensors",
+    "size": 1956193000
+  },
+  {
+    "path": "models/loras/misty-inkwash-silhouette-comfy.safetensors",
+    "size": 234676792
+  },
+  {
+    "path": "models/loras/neon-dusk-cyberpunk-comfy.safetensors",
+    "size": 469287984
+  },
+  {
+    "path": "models/loras/zit_fdpo_v1.safetensors",
+    "size": 169691320
+  },
+  {
+    "path": "models/text_encoders/minimax_music3_text_encoder_pruned_int8_convrot.safetensors",
+    "size": 9196611886
+  },
+  {
+    "path": "models/text_encoders/qwen3vl_32b_minimax_h3_int8_convrot.safetensors",
+    "size": 27141342152
+  },
+  {
+    "path": "models/text_encoders/qwen3vl_32b_minimax_h3_nvfp4_awq.safetensors",
+    "size": 15687142551
+  },
+  {
+    "path": "models/text_encoders/qwen3vl_4b_bf16.safetensors",
+    "size": 8875719384
+  },
+  {
+    "path": "models/text_encoders/qwen_2.5_vl_7b_fp8_scaled.safetensors",
+    "size": 9384670680
+  },
+  {
+    "path": "models/text_encoders/qwen_3_4b.safetensors",
+    "size": 8044982048
+  },
+  {
+    "path": "models/text_encoders/qwen_3_8b_fp8mixed.safetensors",
+    "size": 8664848742
+  },
+  {
+    "path": "models/text_encoders/umt5_xxl_fp8_e4m3fn_scaled.safetensors",
+    "size": 6735906897
+  },
+  {
+    "path": "models/diffusion_models/Wan22_Bernini_HIGH_fp8_e4m3fn_scaled.safetensors",
+    "size": 15574833216
+  },
+  {
+    "path": "models/diffusion_models/Wan22_Bernini_LOW_fp8_e4m3fn_scaled.safetensors",
+    "size": 15574833216
+  },
+  {
+    "path": "models/diffusion_models/flux-2-klein-9b-fp8.safetensors",
+    "size": 9433061528
+  },
+  {
+    "path": "models/diffusion_models/krea2_turbo_fp8_scaled.safetensors",
+    "size": 13141730784
+  },
+  {
+    "path": "models/diffusion_models/minimax_h3_fl2va_bf16.safetensors",
+    "size": 66280487368
+  },
+  {
+    "path": "models/diffusion_models/minimax_h3_fl2va_int8_convrot.safetensors",
+    "size": 34038892334
+  },
+  {
+    "path": "models/diffusion_models/minimax_h3_fl2va_pruned_bf16.safetensors",
+    "size": 40225724176
+  },
+  {
+    "path": "models/diffusion_models/minimax_h3_fl2va_pruned_fp8_scaled.safetensors",
+    "size": 20958205608
+  },
+  {
+    "path": "models/diffusion_models/minimax_h3_fl2va_pruned_int8_convrot.safetensors",
+    "size": 20970379616
+  },
+  {
+    "path": "models/diffusion_models/minimax_h3_ref2va_bf16.safetensors",
+    "size": 66280487368
+  },
+  {
+    "path": "models/diffusion_models/minimax_h3_ref2va_int8_convrot.safetensors",
+    "size": 34038894550
+  },
+  {
+    "path": "models/diffusion_models/minimax_h3_ref2va_pruned_bf16.safetensors",
+    "size": 40225724176
+  },
+  {
+    "path": "models/diffusion_models/minimax_h3_ref2va_pruned_fp8_scaled.safetensors",
+    "size": 20958205608
+  },
+  {
+    "path": "models/diffusion_models/minimax_h3_ref2va_pruned_int8_convrot.safetensors",
+    "size": 20970379616
+  },
+  {
+    "path": "models/diffusion_models/minimax_music3_dit_fp16.safetensors",
+    "size": 4914197682
+  },
+  {
+    "path": "models/diffusion_models/qwen_image_edit_2511_fp8mixed.safetensors",
+    "size": 20533762817
+  },
+  {
+    "path": "models/diffusion_models/seedvr2_3b_int8_convrot.safetensors",
+    "size": 3458259704
+  },
+  {
+    "path": "models/diffusion_models/wan2.2_bernini_r_high_noise_fp8_scaled.safetensors",
+    "size": 15574833216
+  },
+  {
+    "path": "models/diffusion_models/wan2.2_bernini_r_low_noise_fp8_scaled.safetensors",
+    "size": 15574833216
+  },
+  {
+    "path": "models/diffusion_models/z_image_turbo_bf16.safetensors",
+    "size": 12309866400
+  }
+]

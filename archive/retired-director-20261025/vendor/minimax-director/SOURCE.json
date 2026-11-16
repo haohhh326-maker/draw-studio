@@ -1,0 +1,64 @@
+{
+  "files": [
+    {
+      "sha256": "bb9eeb4c3a5ebde41d68843bac50fa1f739ff75023713c458068f4233d6486a5",
+      "path": "web/js/minimax_external_witness.js"
+    },
+    {
+      "sha256": "3403ecc3f50c1b7d70bb0e68306078a912470862ede3541dcf9aae88cf395480",
+      "path": "web/js/minimax_fl2v.js"
+    },
+    {
+      "sha256": "448c2aa291e54ebeefa26b51d44762a93710a69aa1bee305c5ed7ffbd9882db2",
+      "path": "web/js/minimax_gen_timeline.js"
+    },
+    {
+      "sha256": "b49a8aa4543b50031e68d57d1eea7224b85aead15f6160e4b2d2abf2a9810611",
+      "path": "web/js/minimax_i18n.js"
+    },
+    {
+      "sha256": "825b7b51f90dc41c35d1c763d0ab46186c34be1bd5a346503ded9fe5a910f03e",
+      "path": "web/js/minimax_image_batch.js"
+    },
+    {
+      "sha256": "742496961bd9e473a5b4bc8d733a3685d91a3e01c1b792b835bd54625295a7b7",
+      "path": "web/js/minimax_pack.js"
+    },
+    {
+      "sha256": "ea49893120e70ebcf1023c6d4b64a9eeab60f0614d1c6792910235c3646b5a68",
+      "path": "web/js/minimax_prompt_enhancer.js"
+    },
+    {
+      "sha256": "ae2b0629314b7150726a307b83debc97eba05d4f9b00f69ad41aa3cc98520222",
+      "path": "web/js/minimax_prompt_mentions.js"
+    },
+    {
+      "sha256": "94b4b54fd1b51a2f0d74b066e4d1d00c53558491d69ef842ccd756397121fb7b",
+      "path": "web/js/minimax_ref_audio.js"
+    },
+    {
+      "sha256": "e3c1835526909254b9cb283e1a51789bb7837551cbe2bbcc3c22d70666663fac",
+      "path": "web/js/minimax_refine.js"
+    },
+    {
+      "sha256": "32dc02e5a147995dbb1a21f690b02cd150ab10332a026509ef6a44812e4fe07a",
+      "path": "web/js/minimax_segment_loras.js"
+    },
+    {
+      "sha256": "6498c939774b5bb98e23482579f199c3c9ab085b127a3b1f9e35e41ca7527418",
+      "path": "web/js/minimax_selflift.js"
+    },
+    {
+      "sha256": "f622645c160e87a47e9d42e3c5d189b3e7411d59d0bb34d015bab08ef53f7807",
+      "path": "web/js/minimax_semantic_bridge.js"
+    },
+    {
+      "sha256": "8cc39b04306780616f0a0f744f9e26c2f820b524e30b87a36085c34587ed281d",
+      "path": "web/js/minimax_timeline.js"
+    }
+  ],
+  "note": "web/js files are unmodified upstream source. scripts/app.js and scripts/api.js are local canvas host adapters, not upstream.",
+  "license": "Apache-2.0",
+  "repository": "https://github.com/AIMixer/ComfyUI_MiniMaxH3_Director",
+  "revision": "4c6245e518dd8a494f3afc4f3cccd53f22d82d10"
+}

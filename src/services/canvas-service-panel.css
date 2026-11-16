@@ -1,0 +1,132 @@
+.canvas-service-panel {
+  position: absolute;
+  z-index: 180;
+  left: 88px;
+  top: 20px;
+  width: min(1280px, calc(100% - 104px));
+  max-width: calc(100% - 104px);
+  height: min(850px, calc(100% - 40px));
+  min-width: min(500px, calc(100% - 104px));
+  min-height: min(430px, calc(100% - 40px));
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  resize: both;
+  border: 1px solid #4b4e50;
+  border-radius: 14px;
+  background: #26282a;
+  box-shadow: 0 20px 60px #0009;
+  color: var(--text);
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.canvas-service-panel-header {
+  min-height: 50px;
+  padding: 8px 12px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  border-bottom: 1px solid #414446;
+  background: #26282a;
+  cursor: grab;
+  touch-action: none;
+  user-select: none;
+}
+.canvas-service-panel-header:active { cursor: grabbing; }
+.canvas-service-panel-title,
+.canvas-service-panel-tools { display: flex; align-items: center; gap: 9px; min-width: 0; }
+.canvas-service-panel-title img { width: 22px; height: 22px; object-fit: contain; }
+.canvas-service-panel-title strong { font-size: 15px; }
+.canvas-service-panel-title small { color: var(--muted); }
+.canvas-service-panel-tools { flex: none; }
+.canvas-service-panel-tools .icon-button { flex: none; }
+.canvas-service-panel-tools .icon-button:hover:not(:disabled) { background: #36383a; color: var(--text); }
+.canvas-service-panel-tools .icon-button:focus-visible { outline: 1px solid var(--ui-lime); outline-offset: 1px; }
+.canvas-service-zoom-label { min-width: 35px; text-align: center; color: var(--muted); }
+.canvas-service-file-input { display: none; }
+.canvas-service-status-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--muted); }
+.canvas-service-status-dot.connected { background: var(--ui-lime); box-shadow: 0 0 0 3px #d7ff0022; }
+.canvas-service-status-dot.error { background: #ef9388; }
+.canvas-service-header-error { color: #ef9388; font-size: 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: min(48vw, 560px); }
+
+.canvas-service-view {
+  position: relative;
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  background: #fff;
+  cursor: default;
+  outline: none;
+  overscroll-behavior: contain;
+}
+.canvas-service-native-view { overflow: hidden; }
+.canvas-service-native-message {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+  color: #444;
+  text-align: center;
+}
+.canvas-service-frame {
+  position: absolute;
+  display: block;
+  width: 100%;
+  height: 100%;
+  user-select: none;
+  pointer-events: none;
+}
+.canvas-service-page { position: relative; }
+.canvas-service-view-loading {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  color: #444;
+}
+.canvas-service-keyboard {
+  position: absolute;
+  left: 0;
+  top: 0;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  border: 0;
+  opacity: 0;
+  resize: none;
+  pointer-events: none;
+}
+.canvas-service-view-error {
+  position: absolute;
+  left: 12px;
+  right: 12px;
+  bottom: 12px;
+  padding: 8px 10px;
+  border: 1px solid #a65d54;
+  border-radius: 8px;
+  color: #efb1a9;
+  background: #3a211e;
+  box-shadow: 0 4px 16px #0006;
+  pointer-events: none;
+}
+
+@media (max-width: 600px) {
+  .canvas-service-panel {
+    left: 70px;
+    top: 12px;
+    width: calc(100% - 82px);
+    max-width: calc(100% - 82px);
+    height: calc(100% - 24px);
+    min-width: 0;
+    min-height: 260px;
+  }
+  .canvas-service-panel-title small { display: none; }
+  .canvas-service-zoom-label { display: none; }
+  .canvas-service-zoom-button { display: none; }
+}

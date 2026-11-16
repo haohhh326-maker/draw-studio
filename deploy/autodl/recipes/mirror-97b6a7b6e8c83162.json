@@ -1,0 +1,264 @@
+{
+  "960": {
+    "class_type": "CLIPLoader",
+    "inputs": {
+      "clip_name": "qwen_3_4b.safetensors",
+      "type": "lumina2",
+      "device": "default"
+    },
+    "_meta": {
+      "title": "CLIPLoader"
+    }
+  },
+  "961": {
+    "class_type": "VAELoader",
+    "inputs": {
+      "vae_name": "ae.safetensors"
+    },
+    "_meta": {
+      "title": "VAELoader"
+    }
+  },
+  "962": {
+    "class_type": "KSamplerSelect",
+    "inputs": {
+      "sampler_name": "dpmpp_sde"
+    },
+    "_meta": {
+      "title": "KSamplerSelect"
+    }
+  },
+  "963": {
+    "class_type": "VAEDecode",
+    "inputs": {
+      "samples": [
+        "964",
+        0
+      ],
+      "vae": [
+        "961",
+        0
+      ]
+    },
+    "_meta": {
+      "title": "VAEDecode"
+    }
+  },
+  "964": {
+    "class_type": "SamplerCustom",
+    "inputs": {
+      "add_noise": true,
+      "noise_seed": 1,
+      "cfg": 1,
+      "model": [
+        "974",
+        0
+      ],
+      "positive": [
+        "971",
+        0
+      ],
+      "negative": [
+        "970",
+        0
+      ],
+      "sampler": [
+        "962",
+        0
+      ],
+      "sigmas": [
+        "968",
+        0
+      ],
+      "latent_image": [
+        "967",
+        0
+      ]
+    },
+    "_meta": {
+      "title": "SamplerCustom"
+    }
+  },
+  "967": {
+    "class_type": "LatentUpscale",
+    "inputs": {
+      "upscale_method": "area",
+      "width": 1920,
+      "height": 1080,
+      "crop": "disabled",
+      "samples": [
+        "980",
+        0
+      ]
+    },
+    "_meta": {
+      "title": "LatentUpscale"
+    }
+  },
+  "968": {
+    "class_type": "FlowMatchEulerDiscreteScheduler (Custom)",
+    "inputs": {
+      "steps": 20,
+      "start_at_step": [
+        "983",
+        0
+      ],
+      "end_at_step": 20,
+      "base_image_seq_len": 256,
+      "base_shift": 0.5,
+      "invert_sigmas": "disable",
+      "max_image_seq_len": 8192,
+      "max_shift": 1.15,
+      "num_train_timesteps": 1000,
+      "shift": 3,
+      "shift_terminal": 0,
+      "stochastic_sampling": "disable",
+      "time_shift_type": "exponential",
+      "use_beta_sigmas": "disable",
+      "use_dynamic_shifting": "disable",
+      "use_exponential_sigmas": "disable",
+      "use_karras_sigmas": "disable",
+      "device": "cuda"
+    },
+    "_meta": {
+      "title": "FlowMatchEulerDiscreteScheduler (Custom)"
+    }
+  },
+  "970": {
+    "class_type": "CLIPTextEncode",
+    "inputs": {
+      "text": "bad hands, extra fingers, missing fingers, fused fingers, broken hands, mutant hands, twisted limbs, extra limbs, missing limbs, dimple ",
+      "clip": [
+        "960",
+        0
+      ]
+    },
+    "_meta": {
+      "title": "CLIP Text Encode (Negative Prompt)"
+    }
+  },
+  "971": {
+    "class_type": "CLIPTextEncode",
+    "inputs": {
+      "text": "",
+      "clip": [
+        "960",
+        0
+      ]
+    },
+    "_meta": {
+      "title": "CLIP Text Encode (Positive Prompt)"
+    }
+  },
+  "972": {
+    "class_type": "UNETLoader",
+    "inputs": {
+      "unet_name": "z_image_turbo_bf16.safetensors",
+      "weight_dtype": "default"
+    },
+    "_meta": {
+      "title": "UNETLoader"
+    }
+  },
+  "974": {
+    "class_type": "VRGDG_OptionalMultiLoraModelOnly",
+    "inputs": {
+      "use_custom_loras": false,
+      "lora_count": 0,
+      "ltx_two_pass_mode": false,
+      "lora_1": "[none]",
+      "strength_1": 1,
+      "lora_2": "[none]",
+      "strength_2": 1,
+      "lora_3": "[none]",
+      "strength_3": 1,
+      "lora_4": "[none]",
+      "strength_4": 1,
+      "lora_5": "[none]",
+      "strength_5": 1,
+      "lora_6": "[none]",
+      "strength_6": 1,
+      "lora_7": "[none]",
+      "strength_7": 1,
+      "lora_8": "[none]",
+      "strength_8": 1,
+      "lora_9": "[none]",
+      "strength_9": 1,
+      "lora_10": "[none]",
+      "strength_10": 1,
+      "lora_11": "[none]",
+      "strength_11": 1,
+      "lora_12": "[none]",
+      "strength_12": 1,
+      "lora_13": "[none]",
+      "strength_13": 1,
+      "lora_14": "[none]",
+      "strength_14": 1,
+      "lora_15": "[none]",
+      "strength_15": 1,
+      "lora_16": "[none]",
+      "strength_16": 1,
+      "lora_17": "[none]",
+      "strength_17": 1,
+      "lora_18": "[none]",
+      "strength_18": 1,
+      "lora_19": "[none]",
+      "strength_19": 1,
+      "lora_20": "[none]",
+      "strength_20": 1,
+      "model": [
+        "972",
+        0
+      ]
+    },
+    "_meta": {
+      "title": "VRGDG_OptionalMultiLoraModelOnly"
+    }
+  },
+  "975": {
+    "class_type": "PreviewImage",
+    "inputs": {
+      "images": [
+        "963",
+        0
+      ]
+    },
+    "_meta": {
+      "title": "PreviewImage"
+    }
+  },
+  "979": {
+    "class_type": "LoadImage",
+    "inputs": {
+      "image": ""
+    },
+    "_meta": {
+      "title": "LoadImage"
+    }
+  },
+  "980": {
+    "class_type": "VAEEncode",
+    "inputs": {
+      "pixels": [
+        "979",
+        0
+      ],
+      "vae": [
+        "961",
+        0
+      ]
+    },
+    "_meta": {
+      "title": "VAEEncode"
+    }
+  },
+  "983": {
+    "class_type": "PrimitiveInt",
+    "inputs": {
+      "value": 8
+    },
+    "_meta": {
+      "title": "Int - enhance amount"
+    }
+  }
+}

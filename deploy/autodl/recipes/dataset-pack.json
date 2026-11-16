@@ -1,0 +1,11 @@
+{
+  "dataset": {
+    "class_type": "CanvasDatasetBundle",
+    "inputs": {
+      "image_paths": "[]",
+      "caption": "",
+      "captions": "",
+      "filename_prefix": "canvas/dataset"
+    }
+  }
+}
