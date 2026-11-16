@@ -74,6 +74,8 @@ async function snapshot(page) {
 }
 
 async function checkVideo(page) {
+  await page.bringToFront();
+  await page.mouse.move(1200, 800);
   const video = page.locator(".react-flow__node video[data-asset-id]");
   await expect(video).toHaveCount(1);
   await expect(video).toHaveAttribute("poster", /^blob:/, { timeout: 30000 });
@@ -92,7 +94,7 @@ async function checkVideo(page) {
   assert(posterPixels.opaque > 0, "The packaged video poster must contain opaque pixels");
   assert(posterPixels.blue > 10, "The stored poster must contain the blue reference cube");
   await expect.poll(async () => {
-    const screenshot = await video.screenshot();
+    const screenshot = await video.screenshot({ timeout: 8000 });
     await writeFile(path.join(artifactDirectory, "packaged-video-poster.png"), screenshot);
     const { data, info } = await sharp(screenshot).ensureAlpha().raw().toBuffer({ resolveWithObject: true });
     let blue = 0;
@@ -271,9 +273,13 @@ try {
     expectedProject = saved;
     await page.getByRole("button", { name: "软件更新", exact: true }).click();
     const update = page.getByRole("dialog", { name: "软件更新", exact: true });
-    await expect(update.getByRole("status")).toContainText("尚未配置在线更新地址");
     await expect(update.getByText(runtime.version, { exact: true })).toBeVisible();
-    await expect(update.getByRole("button", { name: "选择新版安装包更新", exact: true })).toBeEnabled();
+    await expect(update.getByRole("button", { name: /选择.*安装包/ })).toHaveCount(0);
+    await expect(update.getByRole("button", { name: "检查更新", exact: true })).toBeVisible();
+    await expect.poll(async () => page.evaluate(async () => {
+      const status = await window.drawStudioHost.invoke("get_software_update_status", {});
+      return status.configured;
+    })).toBe(true);
     if (cycle === 0) await page.screenshot({ path: path.join(artifactDirectory, "packaged-software-update.png") });
     await update.getByRole("button", { name: "关闭", exact: true }).click();
     const entry = { cycle, runtime, origin: new URL(page.url()).origin, health,

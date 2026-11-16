@@ -74,7 +74,7 @@ async function openProject(page: Page) {
 }
 
 async function commands(page: Page) {
-  return page.evaluate(() => (window as Window & { updateFixture: UpdateFixture }).updateFixture.calls.filter(call => call.command.includes("software_update") && call.command !== "get_software_update_status")));
+  return page.evaluate(() => (window as Window & { updateFixture: UpdateFixture }).updateFixture.calls.filter(call => call.command.includes("software_update") && call.command !== "get_software_update_status"));
 }
 
 async function savedProjectIds(page: Page) {
