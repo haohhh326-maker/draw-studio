@@ -15,6 +15,11 @@
       "bytes": 933
     },
     {
+      "path": "public/notices/T8-penguin-canvas.txt",
+      "sha256": "fc1536c2532831f2233568092c2c00a4b9263932460983d78756ba2f2c7ee734",
+      "bytes": 1254
+    },
+    {
       "path": "server/agent/drama/officialDramaBundle.js",
       "sha256": "99fb316d3da0e88a6478c02611d95c477fd82362883e0f1f0cd16715560ae3c4",
       "bytes": 10301
