@@ -39,7 +39,12 @@ jobs:
           node-version: '24'
           architecture: x64
       - name: Install locked dependencies
-        run: npm ci
+        run: |
+          npm ci
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          node node_modules/electron/install.js
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          if (-not (Test-Path -LiteralPath node_modules/electron/dist/electron.exe -PathType Leaf)) { throw 'Electron runtime was not installed.' }
       - name: Verify draft and reuse published build resources
         env:
           GH_TOKEN: ${{ github.token }}
@@ -55,9 +60,9 @@ jobs:
           node scripts/prepare-release-base.mjs --finish
       - name: Package Windows application
         run: |
-          npx electron-builder --config electron-builder.cjs --win --x64 --dir
+          npx electron-builder --config electron-builder.cjs --win --x64 --dir --publish never
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-          npx electron-builder --config electron-builder.cjs --win nsis --x64 --prepackaged release/win-unpacked
+          npx electron-builder --config electron-builder.cjs --win nsis --x64 --prepackaged release/win-unpacked --publish never
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
       - name: Upload verified installer and update manifest to the draft
         env:
