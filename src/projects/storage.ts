@@ -139,6 +139,8 @@ export const safeConnection = (c: Connection): Connection => {
     authHeader: c.authHeader,
     authPrefix: c.authPrefix,
     timeoutMinutes: c.timeoutMinutes,
+    ...(c.autodl && /^pro-[a-zA-Z0-9-]+$/.test(c.autodl.instanceUuid)
+      ? { autodl: { instanceUuid: c.autodl.instanceUuid } } : {}),
   };
   return isRunningHubNativeConnection(connection) ? normalizeRunningHubNativeConnection(connection) : connection;
 };

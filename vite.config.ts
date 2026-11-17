@@ -10,9 +10,10 @@ import { aifisherWorkflowReaderPlugin } from "./scripts/aifisher-workflow-reader
 import { videoPlaybackPlugin } from "./scripts/video-playback-plugin";
 import { museBridgePlugin } from "./scripts/muse-bridge-plugin";
 import { deepSeekBridgePlugin } from "./scripts/deepseek-bridge-plugin";
+import { autoDLPowerPlugin } from "./scripts/autodl-power-plugin";
 export default defineConfig({
   root: realpathSync(process.cwd()),
-  plugins: [react(), museBridgePlugin(realpathSync(process.cwd())), deepSeekBridgePlugin(realpathSync(process.cwd())), videoPlaybackPlugin(), aifisherWorkflowReaderPlugin(realpathSync(process.cwd())), workflowLibraryPlugin(realpathSync(process.cwd())), promptOptimizationPlugin(realpathSync(process.cwd())), runningHubProxyPlugin(), runningHubNativeProxyPlugin(), cloudFileTransferPlugin(realpathSync(process.cwd()))],
+  plugins: [react(), museBridgePlugin(realpathSync(process.cwd())), deepSeekBridgePlugin(realpathSync(process.cwd())), autoDLPowerPlugin(realpathSync(process.cwd())), videoPlaybackPlugin(), aifisherWorkflowReaderPlugin(realpathSync(process.cwd())), workflowLibraryPlugin(realpathSync(process.cwd())), promptOptimizationPlugin(realpathSync(process.cwd())), runningHubProxyPlugin(), runningHubNativeProxyPlugin(), cloudFileTransferPlugin(realpathSync(process.cwd()))],
   clearScreen: false,
   server: { strictPort: true },
   // Cached upstream pages and archived examples are not application entries.

@@ -8,6 +8,7 @@ import type { Plugin, PreviewServer, PreviewServerHook } from "vite";
 import { aifisherWorkflowReaderPlugin } from "./aifisher-workflow-reader-plugin";
 import { cloudFileTransferPlugin } from "./cloud-file-transfer-plugin";
 import { deepSeekBridgePlugin } from "./deepseek-bridge-plugin";
+import { autoDLPowerPlugin } from "./autodl-power-plugin";
 import { museBridgePlugin } from "./muse-bridge-plugin";
 import { promptOptimizationPlugin } from "./prompt-optimization-plugin";
 import { runningHubNativeProxyPlugin } from "./runninghub-native-proxy-plugin";
@@ -131,7 +132,7 @@ export async function startDesktopServer(options: DesktopServerOptions) {
   });
   const middlewares = { use(handler: Middleware) { stack.push(handler); return middlewares; } };
   const context = { config: { base: "/" }, httpServer: server, middlewares, close } as unknown as PreviewServer;
-  const plugins: Plugin[] = [museBridgePlugin(rootDir), deepSeekBridgePlugin(rootDir), videoPlaybackPlugin(),
+  const plugins: Plugin[] = [museBridgePlugin(rootDir), deepSeekBridgePlugin(rootDir), autoDLPowerPlugin(rootDir), videoPlaybackPlugin(),
     aifisherWorkflowReaderPlugin(rootDir), workflowLibraryPlugin(rootDir), promptOptimizationPlugin(rootDir),
     runningHubProxyPlugin(), runningHubNativeProxyPlugin(), cloudFileTransferPlugin(rootDir)];
   const afterStatic: (() => void)[] = [];

@@ -13,6 +13,7 @@ import { cancelWorkstationCheck, connectWorkstation } from "./connection-actions
 import "./compute-settings.css";
 import { MuseSettings } from "../muse/MuseSettings";
 import { useMuseSession } from "../muse/session";
+import { AutoDLPowerSettings } from "../autodl/AutoDLPowerSettings";
 
 
 const RunningHubWorkflowDialog = lazy(() => import("../runninghub/RunningHubWorkflowDialog").then(module => ({ default: module.RunningHubWorkflowDialog })));
@@ -120,7 +121,7 @@ export function ComputeSettings({ onClose, initialProvider }: {
             <button type="button" aria-pressed={!cloudFilesOpen} onClick={() => setCloudFilesOpen(false)}><Cloud size={15} aria-hidden="true" />连接设置</button>
             <button type="button" aria-pressed={cloudFilesOpen} onClick={() => setCloudFilesOpen(true)}><FolderSync size={15} aria-hidden="true" />文件传输</button>
           </div>
-          {cloudFilesOpen ? <Suspense fallback={<p role="status">正在打开文件传输…</p>}><CloudFileTransferPanel /></Suspense> : <div className="compute-settings-fields">
+          {cloudFilesOpen ? <Suspense fallback={<p role="status">正在打开文件传输…</p>}><CloudFileTransferPanel /></Suspense> : <><div className="compute-settings-fields">
           <label>连接名称<input aria-label="云端连接名称" value={cloudDraft.name} onChange={event => cloudField("name", event.target.value)} /></label>
           <label>远程地址<input aria-label="云端远程地址" inputMode="url" autoComplete="off" spellCheck={false} placeholder="http://127.0.0.1:8188" value={cloudDraft.baseUrl} onChange={event => cloudField("baseUrl", event.target.value)} /></label>
           <label>访问令牌<input type="password" aria-label="云端访问令牌" autoComplete="off" spellCheck={false} value={cloudDraft.token} onChange={event => cloudField("token", event.target.value)} /></label>
@@ -128,7 +129,7 @@ export function ComputeSettings({ onClose, initialProvider }: {
             <label>认证头<input aria-label="云端认证头" autoComplete="off" spellCheck={false} value={cloudDraft.authHeader} onChange={event => cloudField("authHeader", event.target.value)} /></label>
             <label>认证前缀<input aria-label="云端认证前缀" autoComplete="off" spellCheck={false} placeholder="Bearer " value={cloudDraft.authPrefix} onChange={event => cloudField("authPrefix", event.target.value)} /></label>
           </details>
-        </div>}
+        </div><AutoDLPowerSettings connection={connection} connectionChanged={cloudChanged} /></>}
         </div> : tab === "runninghub-workflow" ? <div className="compute-settings-fields runninghub-settings">
           <RunningHubAccountSettings />
           <Suspense fallback={<p role="status">正在打开工作流…</p>}><RunningHubRemoteWorkflowManager inline onClose={onClose} /></Suspense>

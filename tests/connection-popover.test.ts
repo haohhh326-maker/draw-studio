@@ -63,3 +63,11 @@ it("splits pasted native addresses before rendering and retains the native key w
   expect(replaced).toMatchObject({ baseUrl: "https://www.runninghub.cn/proxy", token: "new-fixture-key" });
   expect(saveConnectionDraft(current, replaced).connection.token).toBe("new-fixture-key");
 });
+
+it("keeps an AutoDL binding for cosmetic URL edits and clears it when changing the server", () => {
+  const managed = { ...current, autodl: { instanceUuid: "pro-fixture" } };
+  expect(saveConnectionDraft(managed, { ...connectionDraft(managed), baseUrl: current.baseUrl + "/" }).connection.autodl).toEqual(managed.autodl);
+  expect(saveConnectionDraft(managed, { ...connectionDraft(managed), baseUrl: current.baseUrl.replace("canvas.example", "CANVAS.example:443") }).connection.autodl).toEqual(managed.autodl);
+  expect(saveConnectionDraft(managed, { ...connectionDraft(managed), baseUrl: "https://another.example" }).connection.autodl).toBeUndefined();
+  expect(managed.autodl).toEqual({ instanceUuid: "pro-fixture" });
+});

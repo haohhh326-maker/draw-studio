@@ -7,6 +7,7 @@ import { connectWorkstation } from "./connection-actions";
 import { ConnectionCheckButton } from "./ConnectionCheckButton";
 import type { Connection } from "../types";
 import { isRunningHubNativeConnection, normalizeRunningHubNativeConnection } from "../runninghub/native-connection";
+import { sameAutoDLEndpoint } from "../autodl/endpoint";
 import "./settings.css";
 
 export type ConnectionDraft = Pick<Connection, "name" | "baseUrl" | "token" | "authHeader" | "authPrefix">;
@@ -44,6 +45,7 @@ export function saveConnectionDraft(current: Connection, draft: ConnectionDraft)
     authPrefix: draft.authPrefix,
   };
   if (isRunningHubNativeConnection(connection)) connection = normalizeRunningHubNativeConnection(connection);
+  if (!sameAutoDLEndpoint(current.baseUrl, connection.baseUrl)) delete connection.autodl;
   return {
     connection,
     endpointChanged: current.baseUrl !== connection.baseUrl,

@@ -24,6 +24,7 @@ import { normalizeNativeRunningHubOutputFields } from "../runninghub/native-outp
 import { isRunningHubNativeConnection, NativeRunningHubAccountError, normalizeRunningHubNativeConnection } from "../runninghub/native-connection";
 import { activeConnection, executionWorkflows, computeEndpoint, runningHubSite, isRunningHubProvider, nodeComputeState } from "../compute/providers";
 import { generationPreparationIdentity } from "./preparation-context";
+import { autoDLTaskPower } from "../autodl/client";
 import { applyWorkflowCredentials, cleanWorkflowCredentials, credentialParameterValues, detectWorkflowCredentials, missingWorkflowCredentials, redactWorkflowCredentialText } from "../workflow/credentials";
 import {
   busyPhases,
@@ -240,6 +241,46 @@ export async function resumeTask(taskId: string) {
   }
   await execute(taskId, true);
 }
+async function waitForAutoDLComfyUI(client: ComfyUIClient, signal: AbortSignal, onStatus: (message: string) => void) {
+  const deadline = Date.now() + 10 * 60_000;
+  onStatus("AutoDL 已开机，正在等待 ComfyUI 服务就绪…");
+  while (Date.now() < deadline) {
+    signal.throwIfAborted();
+    try {
+      const stats = await client.json<{ system?: unknown; devices?: unknown[] }>("/system_stats", {
+        signal: AbortSignal.any([signal, AbortSignal.timeout(Math.min(10_000, deadline - Date.now()))]),
+      });
+      signal.throwIfAborted();
+      if (stats && typeof stats === "object" && (stats.system || Array.isArray(stats.devices))) return;
+    } catch (error) {
+      signal.throwIfAborted();
+      if (error instanceof ApiError && [401, 403].includes(error.status))
+        throw new Error("AutoDL 已开机，但 ComfyUI 服务鉴权失败，请检查 ComfyUI 连接 Token。");
+    }
+    await new Promise<void>((resolve, reject) => {
+      const finish = () => { signal.removeEventListener("abort", cancel); resolve(); };
+      const timer = setTimeout(finish, Math.min(2_000, Math.max(0, deadline - Date.now())));
+      const cancel = () => { clearTimeout(timer); signal.removeEventListener("abort", cancel); reject(signal.reason); };
+      signal.addEventListener("abort", cancel, { once: true });
+      if (signal.aborted) cancel();
+    });
+  }
+  throw new Error("AutoDL 已开机，但 ComfyUI 服务长时间未就绪，本次未提交生成任务。请检查实例内的 ComfyUI 启动配置。");
+}
+async function connectAutoDLComfyUI(client: ComfyUIClient, signal: AbortSignal) {
+  signal.throwIfAborted();
+  let cancel = () => {};
+  const cancelled = new Promise<never>((_resolve, reject) => {
+    cancel = () => { client.disconnect(); reject(signal.reason); };
+    signal.addEventListener("abort", cancel, { once: true });
+    if (signal.aborted) cancel();
+  });
+  try {
+    signal.throwIfAborted();
+    const connected = client.connect(signal).finally(() => { if (signal.aborted) client.disconnect(); });
+    await Promise.race([connected, cancelled]);
+  } finally { signal.removeEventListener("abort", cancel); }
+}
 async function execute(taskId: string, resume: boolean) {
   const task = useStore.getState().project.tasks[taskId];
   if (!task || sessions.has(taskId) || task.status === "cancelled") return;
@@ -253,6 +294,7 @@ async function execute(taskId: string, resume: boolean) {
   }
   const client = factory.createClient(credentials(task), task.clientId, task.workflow, task.runningHubInstanceType),
     abort = new AbortController();
+  let executionSignal = abort.signal;
   const runninghub = task.executorType === "runninghub";
   const native = !runninghub && isRunningHubNativeConnection(client.connection);
   const remote = runninghub || native;
@@ -302,7 +344,7 @@ async function execute(taskId: string, resume: boolean) {
     useStore.getState().patchTask(taskId, p);
   };
   const saving = (message: string) => {
-    if (abort.signal.aborted) return;
+    if (executionSignal.aborted) return;
     const warnings = useStore.getState().project.tasks[taskId]?.outputWarnings ?? [];
     patch({ savingMessage: message, details: [message, ...warnings].join("\n") });
   };
@@ -312,6 +354,7 @@ async function execute(taskId: string, resume: boolean) {
     return `正在下载结果 ${(received / divisor).toFixed(1)}${total ? ` / ${(total / divisor).toFixed(1)}` : ""} ${unit}`;
   };
   let outputDownloads: ReturnType<typeof createOutputDownloads> | undefined;
+  let autoDLLease: Awaited<ReturnType<typeof autoDLTaskPower>>;
   const prepareStarted = Date.now();
   try {
     patch({
@@ -320,21 +363,33 @@ async function execute(taskId: string, resume: boolean) {
       progress: undefined,
       savingMessage: undefined,
     });
-    abort.signal.throwIfAborted();
+    executionSignal.throwIfAborted();
+    if (!runninghub && !native && client.connection.autodl?.instanceUuid) {
+      autoDLLease = await autoDLTaskPower(client.connection, {
+        taskId, attemptId: crypto.randomUUID(), signal: abort.signal,
+        onStatus: message => patch({ details: message }),
+      });
+      if (autoDLLease) executionSignal = AbortSignal.any([abort.signal, autoDLLease.signal]);
+      requireScope();
+      executionSignal.throwIfAborted();
+      if (autoDLLease) await waitForAutoDLComfyUI(client, executionSignal, message => patch({ details: message }));
+      requireScope();
+      executionSignal.throwIfAborted();
+    }
     try {
       // Resuming RH only observes an accepted task; its current input schema is
       // irrelevant and must not block recovery after the workflow was edited.
       if (!task.remoteOutputs?.length && task.outputText === undefined && !(runninghub && resume))
-        await (native ? client.connect(abort.signal) : client.connect());
+        await (autoDLLease ? connectAutoDLComfyUI(client, executionSignal) : native ? client.connect(abort.signal) : client.connect());
     } catch (e) {
       if (runninghub) throw e;
       patch({ details: String(e) });
     }
     requireScope();
-    abort.signal.throwIfAborted();
+    executionSignal.throwIfAborted();
     let promptId = task.promptId;
     if (resume) {
-      promptId ??= await (native ? client.findSubmittedPrompt(task.requestId, abort.signal) : client.findSubmittedPrompt(task.requestId));
+      promptId ??= await (native || autoDLLease ? client.findSubmittedPrompt(task.requestId, executionSignal) : client.findSubmittedPrompt(task.requestId));
       requireScope();
       if (!promptId)
         throw new Error(
@@ -355,12 +410,12 @@ async function execute(taskId: string, resume: boolean) {
       const uploaded: Record<string, string> = {};
       for (const input of task.input.assets) {
         if (uploaded[input.asset.id]) continue;
-        abort.signal.throwIfAborted();
+        executionSignal.throwIfAborted();
         const file = await client.uploadAsset(
           blobs.get(input.asset.id)!,
           uploadName(input.asset.name),
           staging.inputSubfolder,
-          abort.signal,
+          executionSignal,
         );
         requireScope();
         uploads[input.asset.id] = file;
@@ -396,10 +451,10 @@ async function execute(taskId: string, resume: boolean) {
       if (task.executorType === "comfyui")
         built.workflow = outputBranch(built.workflow, [task.workflow.output.nodeId, ...(task.workflow.additionalOutputs ?? []).map(output => output.nodeId)]);
       if (native) built.workflow = await prepareNativeRunningHubMedia(built.workflow, Object.values(uploads),
-        classType => client.json("/object_info/" + encodeURIComponent(classType), { signal: abort.signal }),
-        () => client.json("/object_info", { signal: abort.signal }));
+        classType => client.json("/object_info/" + encodeURIComponent(classType), { signal: executionSignal }),
+        () => client.json("/object_info", { signal: executionSignal }));
       requireScope();
-      abort.signal.throwIfAborted();
+      executionSignal.throwIfAborted();
       patch({
         status: "submitting",
         // Persist the uncertain boundary before sending the generation request.
@@ -409,12 +464,12 @@ async function execute(taskId: string, resume: boolean) {
         executionWorkflow: cleanWorkflowCredentials({ ...task.workflow, template: built.workflow }).template,
       });
       await save(true);
-      abort.signal.throwIfAborted();
+      executionSignal.throwIfAborted();
       if (runninghub) addTiming("prepareMs", Date.now() - prepareStarted);
       attempted = true;
       session.submitting = true;
       try {
-        promptId = await measured("submitMs", () => client.queuePrompt(built.workflow, task.requestId, runninghub ? abort.signal : undefined));
+        promptId = await measured("submitMs", () => client.queuePrompt(built.workflow, task.requestId, runninghub || autoDLLease ? executionSignal : undefined));
         requireScope();
       } catch (e) {
         submissionRejected =
@@ -450,6 +505,7 @@ async function execute(taskId: string, resume: boolean) {
       session.remoteCancelConfirmed = true;
       throw new DOMException("Aborted", "AbortError");
     }
+    executionSignal.throwIfAborted();
     let files = task.remoteOutputs;
     let textResult = task.outputText;
     let fileKinds = { ...(task.remoteOutputKinds ?? {}) };
@@ -460,7 +516,7 @@ async function execute(taskId: string, resume: boolean) {
       const history = await measured("observeMs", () => client.waitForCompletion(
         promptId!,
         (p) => patch(p),
-        abort.signal,
+        executionSignal,
         useStore.getState().project.tasks[taskId]?.executionWorkflow ?? task.executionWorkflow ?? task.workflow.template,
       ));
       requireScope();
@@ -533,7 +589,7 @@ async function execute(taskId: string, resume: boolean) {
     if (runninghub) {
       const missing = new Map<string, NonNullable<typeof files>[number]>();
       for (const file of receiveFiles) {
-        abort.signal.throwIfAborted();
+        executionSignal.throwIfAborted();
         const key = outputKey(file);
         const saved = downloads.find(entry => outputKey(entry.file) === key);
         if (saved) {
@@ -567,10 +623,10 @@ async function execute(taskId: string, resume: boolean) {
           // Count overlapping network requests once; local import/save can overlap this interval.
           if (--activeDownloads === 0) addTiming("downloadMs", Date.now() - downloadStarted);
         }
-      }, abort.signal);
+      }, executionSignal);
     }
     for (const file of receiveFiles) {
-      abort.signal.throwIfAborted();
+      executionSignal.throwIfAborted();
       const key = outputKey(file);
       if (seenFiles.has(key)) continue;
       seenFiles.add(key);
@@ -596,10 +652,10 @@ async function execute(taskId: string, resume: boolean) {
       activeResultKey = key;
       const progress = downloadProgress.get(key);
       saving(progress ? downloadMessage(progress.received, progress.total) : "正在下载结果");
-      const blob = outputDownloads ? await outputDownloads.take(file) : await client.getOutput(file, abort.signal,
+      const blob = outputDownloads ? await outputDownloads.take(file) : await client.getOutput(file, executionSignal,
         native ? { promptId: promptId!, onlyOutput: files?.length === 1 } : undefined);
       requireScope();
-      abort.signal.throwIfAborted();
+      executionSignal.throwIfAborted();
       activeResultKey = undefined;
       if (!blob.size) throw new Error("服务器返回了空结果文件。");
       if (/^text\/html(?:;|$)/i.test(blob.type) && !/\.html?$/i.test(file.filename)) {
@@ -613,7 +669,7 @@ async function execute(taskId: string, resume: boolean) {
       saving("正在写入本地结果");
       const asset = { ...await measured("importMs", () => importAsset(blob, file.filename)), inLibrary: false };
       requireScope();
-      abort.signal.throwIfAborted();
+      executionSignal.throwIfAborted();
       fileKinds[key] = asset.kind;
       const index = downloads.findIndex(
         (entry) => outputKey(entry.file) === outputKey(file),
@@ -632,7 +688,7 @@ async function execute(taskId: string, resume: boolean) {
     }
     if (textAsset && !textFirst) assets.push(textAsset);
     requireScope();
-    abort.signal.throwIfAborted();
+    executionSignal.throwIfAborted();
     patch({ remoteOutputKinds: { ...fileKinds }, savingMessage: undefined,
       details: ["结果已保存到画布", ...outputWarnings].join("\n") });
     if (remote && useStore.getState().project.tasks[taskId]?.status === "cancelled") return;
@@ -656,7 +712,8 @@ async function execute(taskId: string, resume: boolean) {
     });
     await save(true);
     useStore.getState().notify("生成完成，结果已保存到原节点。");
-  } catch (e) {
+  } catch (cause) {
+    const e = autoDLLease?.signal.aborted ? autoDLLease.signal.reason : cause;
     if (!session.isCurrent()) return;
     const current = useStore.getState().project.tasks[taskId];
     if (remote && current && ["completed", "cancelled"].includes(current.status)) return;
@@ -700,6 +757,10 @@ async function execute(taskId: string, resume: boolean) {
     unsubscribe();
     client.disconnect();
     if (sessions.get(taskId) === session) sessions.delete(taskId);
+    if (autoDLLease) {
+      try { await autoDLLease.release(); }
+      catch (error) { useStore.getState().notify("AutoDL 自动关机未确认，请在算力设置中检查并重试关机：" + friendlyError(error).error); }
+    }
   }
 }
 export async function cancelTask(taskId: string) {

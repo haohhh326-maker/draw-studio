@@ -1,0 +1,21 @@
+.autodl-power-settings { margin-top: 18px; padding-top: 18px; border-top: 1px solid var(--surface-border); }
+.autodl-power-settings > header { display: flex; justify-content: space-between; align-items: center; gap: 12px; }
+.autodl-power-settings h3 { margin: 0; font-size: 14px; font-weight: 600; }
+.autodl-power-settings .autodl-power-enable { display: inline-flex; flex-direction: row; align-items: center; gap: 7px; font-size: 13px; color: var(--text-secondary); }
+.autodl-power-enable input { width: 16px; height: 16px; margin: 0; accent-color: var(--ui-lime); }
+.autodl-power-description, .autodl-power-hint { margin: 10px 0; color: var(--muted); font-size: 12px; line-height: 1.7; }
+.autodl-power-fields { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 13px; }
+.autodl-power-fields > label { display: flex; flex-direction: column; gap: 7px; min-width: 0; color: var(--text-secondary); font-size: 13px; }
+.autodl-power-fields input { width: 100%; height: 38px; min-width: 0; padding: 8px 10px; border: 1px solid var(--surface-border); border-radius: 8px; background: var(--surface-input); color: var(--text); font: inherit; }
+.autodl-power-fields input:focus { border-color: var(--ui-lime); outline: 1px solid var(--ui-lime); outline-offset: 1px; }
+.autodl-power-token-heading { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 5px 10px; }
+.autodl-power-token-heading a { color: var(--text-secondary); font-size: 11px; }
+.autodl-power-footer { display: flex; align-items: flex-end; justify-content: space-between; flex-wrap: wrap; gap: 12px; }
+.autodl-power-footer > p { display: grid; gap: 4px; flex: 1 1 220px; margin: 0; font-size: 12px; line-height: 1.6; color: var(--muted); overflow-wrap: anywhere; }
+.autodl-power-footer > p strong { font-weight: 500; color: var(--text-secondary); }
+.autodl-power-actions { display: flex; flex-wrap: wrap; gap: 8px; }
+.autodl-power-actions button { min-height: 35px; padding: 7px 12px; border: 1px solid var(--surface-border); border-radius: 8px; font: inherit; font-size: 12px; background: var(--surface-raised); }
+.autodl-power-actions button.primary { color: var(--ui-lime-ink); background: var(--ui-lime); border-color: var(--ui-lime); }
+.autodl-power-settings input:disabled, .autodl-power-settings button:disabled { opacity: .5; }
+.autodl-power-error { margin: 10px 0 0; color: #f4a6a6; font-size: 12px; line-height: 1.7; overflow-wrap: anywhere; }
+@media (max-width: 600px) { .autodl-power-fields { grid-template-columns: minmax(0, 1fr); } }

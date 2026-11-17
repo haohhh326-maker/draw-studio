@@ -25,6 +25,8 @@ export function taskConnectionSnapshot(connection: TaskConnection | Connection):
     authHeader: connection.authHeader,
     authPrefix: connection.authPrefix,
     timeoutMinutes: connection.timeoutMinutes,
+    ...(connection.autodl && /^pro-[a-zA-Z0-9-]+$/.test(connection.autodl.instanceUuid)
+      ? { autodl: { instanceUuid: connection.autodl.instanceUuid } } : {}),
   };
   if (nativeAddressCandidate(snapshot.baseUrl)) {
     try {

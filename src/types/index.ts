@@ -451,6 +451,7 @@ export type Connection = {
   authHeader: string;
   authPrefix: string;
   timeoutMinutes: number;
+  autodl?: { instanceUuid: string };
 };
 export const busyPhases: Phase[] = [
   "uploading",
