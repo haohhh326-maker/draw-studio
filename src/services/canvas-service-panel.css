@@ -44,6 +44,12 @@
 .canvas-service-panel-tools .icon-button { flex: none; }
 .canvas-service-panel-tools .icon-button:hover:not(:disabled) { background: #36383a; color: var(--text); }
 .canvas-service-panel-tools .icon-button:focus-visible { outline: 1px solid var(--ui-lime); outline-offset: 1px; }
+.canvas-service-update { display: grid; flex: none; gap: 4px; min-width: 124px; padding: 6px 10px; border: 1px solid var(--surface-border); border-radius: 8px; background: var(--surface-input); color: var(--text); font-size: 12px; line-height: 1.2; text-align: left; }
+.canvas-service-update progress { width: 100%; height: 3px; border: 0; border-radius: 3px; overflow: hidden; accent-color: var(--ui-lime); }
+.canvas-service-update progress::-webkit-progress-bar { background: var(--surface-border); }
+.canvas-service-update progress::-webkit-progress-value { background: var(--ui-lime); }
+.canvas-service-update[data-error="true"] { color: #ef9388; }
+.canvas-service-panel-header:has(.canvas-service-update) .canvas-service-panel-title small { display: none; }
 .canvas-service-zoom-label { min-width: 35px; text-align: center; color: var(--muted); }
 .canvas-service-file-input { display: none; }
 .canvas-service-status-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--muted); }
