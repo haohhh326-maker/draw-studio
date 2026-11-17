@@ -132,8 +132,12 @@ describe("in-application online software updates", () => {
     expect(context.launch).not.toHaveBeenCalled();
     expect(context.app.quit).not.toHaveBeenCalled();
     expect(await readFile(context.file)).toEqual(bytes);
+    const reopened = context.updates.downloadAndInstall();
+    expect(await context.updates.check()).toMatchObject({ phase: "saving", downloadedBytes: bytes.length });
+    expect(context.downloads()).toHaveLength(1);
+    expect(context.beforeInstall).toHaveBeenCalledTimes(1);
     saved.resolve(undefined);
-    await install; await settle();
+    await Promise.all([install, reopened]); await settle();
     expect(context.updates.getStatus().phase).toBe("installing");
     expect(context.launch).toHaveBeenCalledTimes(1);
     expect(context.app.quit).toHaveBeenCalledTimes(1);
@@ -174,6 +178,21 @@ describe("in-application online software updates", () => {
     expect(context.beforeInstall).toHaveBeenCalledTimes(1);
     expect(context.launch).toHaveBeenCalledTimes(1);
     expect(context.app.quit).toHaveBeenCalledTimes(1);
+  });
+
+  it("keeps the installer handoff through a reopened dialog check and repeated update requests", async () => {
+    const context = await fixture();
+    await context.updates.downloadAndInstall();
+    expect(context.updates.getStatus()).toMatchObject({ phase: "installing", downloadedBytes: bytes.length, percent: 100 });
+    expect(await context.updates.check()).toMatchObject({ phase: "installing", downloadedBytes: bytes.length, percent: 100 });
+    await Promise.all([context.updates.downloadAndInstall(), context.updates.install()]);
+    await settle();
+    expect(context.downloads()).toHaveLength(1);
+    expect(context.fetcher).toHaveBeenCalledTimes(2);
+    expect(context.beforeInstall).toHaveBeenCalledTimes(1);
+    expect(context.launch).toHaveBeenCalledTimes(1);
+    expect(context.app.quit).toHaveBeenCalledTimes(1);
+    expect(context.dialog.showOpenDialog).not.toHaveBeenCalled();
   });
 
   it("removes a hash-matching non-executable before publishing its final filename", async () => {

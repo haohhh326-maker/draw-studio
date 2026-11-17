@@ -1,0 +1,66 @@
+name: Build Windows installer from published resources
+
+on:
+  workflow_dispatch:
+    inputs:
+      base_version:
+        description: Published version that supplies the bundled resources
+        required: true
+        default: '0.1.2'
+        type: string
+      release_id:
+        description: Numeric ID of the repository owner's draft release
+        required: true
+        type: string
+
+permissions:
+  contents: write
+
+concurrency:
+  group: windows-release-${{ github.repository }}-${{ inputs.release_id }}
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: windows-latest
+    defaults:
+      run:
+        shell: pwsh
+    env:
+      PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD: '1'
+    steps:
+      # Official v4 refs verified through each repository's Git refs API.
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version: '24'
+          architecture: x64
+      - name: Install locked dependencies
+        run: npm ci
+      - name: Verify draft and reuse published build resources
+        env:
+          GH_TOKEN: ${{ github.token }}
+          BASE_VERSION: ${{ inputs.base_version }}
+          RELEASE_ID: ${{ inputs.release_id }}
+        run: node scripts/prepare-release-base.mjs --prepare --base-version "$env:BASE_VERSION" --release-id "$env:RELEASE_ID"
+      - name: Build current application
+        run: |
+          npm run build
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          npm run desktop:prepare
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          node scripts/prepare-release-base.mjs --finish
+      - name: Package Windows application
+        run: |
+          npx electron-builder --config electron-builder.cjs --win --x64 --dir
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          npx electron-builder --config electron-builder.cjs --win nsis --x64 --prepackaged release/win-unpacked
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+      - name: Upload verified installer and update manifest to the draft
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_ID: ${{ inputs.release_id }}
+        run: node scripts/prepare-release-base.mjs --upload --release-id "$env:RELEASE_ID"

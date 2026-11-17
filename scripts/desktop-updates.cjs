@@ -78,7 +78,7 @@ function createSoftwareUpdates({ app, dialog, userData, owner, defaultFeedUrl, d
     return checking;
   }
   function check() {
-    return action ? Promise.resolve(getStatus()) : requestCheck();
+    return action || status.phase === "installing" ? Promise.resolve(getStatus()) : requestCheck();
   }
   async function validateExecutable(file) {
     const handle = await fs.open(file, "r");

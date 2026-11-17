@@ -35,7 +35,7 @@ npm run desktop
 npm run desktop:build
 ```
 
-安装程序生成在 `release/Draw-studio-0.1.2-Windows-x64-Setup.exe`。构建前安装 Playwright Chromium（`npx playwright install chromium`），将 FFmpeg、FFprobe 加入 PATH，并按照 [原生组件构建说明](native/cloud-transfer/README.md) 准备 WSL 文件传输组件。
+安装程序生成在 `release/Draw-studio-0.1.3-Windows-x64-Setup.exe`。构建前安装 Playwright Chromium（`npx playwright install chromium`），将 FFmpeg、FFprobe 加入 PATH，并按照 [原生组件构建说明](native/cloud-transfer/README.md) 准备 WSL 文件传输组件。
 
 可通过 `DRAW_STUDIO_WORKFLOW_SOURCE` 指定附带的工作流目录。本机兼容默认目录为 `E:/123/DFCine/DFCine0.26/workflows`，该目录不存在时构建标准空目录。首次启动会把资源复制到应用用户数据目录下的 `workspace`，后续启动补充缺少的文件，并保留用户编辑。工作流源相邻的 `resources/app.asar` 存在时一并附带，用于读取旧 `.dfenc` 工作流。
 
