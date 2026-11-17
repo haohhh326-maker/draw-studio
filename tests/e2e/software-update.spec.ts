@@ -32,9 +32,6 @@ async function desktopHost(page: Page, results: CheckResult[]) {
       const call: UpdateFixture["calls"][number] = { command, args };
       fixture.calls.push(call);
       if (command === "get_software_update_status") return { ...fixture.status };
-      if (command === "export_service_webview_auth") return {
-        cookies: [{ name: args.service === "muse" ? "hatch_sess" : "ds_session_id", value: "update-fixture", domain: ".example.test", path: "/" }], origins: [],
-      };
       if (command === "check_software_update") {
         const result = checkResults.length > 1 ? checkResults.shift()! : checkResults[0];
         if (result.error) { fixture.status = { ...fixture.status, phase: "error", error: result.error }; throw new Error(result.error); }
@@ -282,36 +279,11 @@ test("startup notifies once and an in-progress update survives closing and reope
   await expect(page.locator(".more-menu")).toHaveCount(0);
   await expect(page.locator(".react-flow__minimap")).toBeVisible();
   await expectUpdateClearOfCanvasControls(200);
-  await page.getByRole("button", { name: "网页服务", exact: true }).click();
-  await page.getByRole("menuitem", { name: "Muse", exact: true }).click();
-  const muse = page.getByRole("dialog", { name: "Muse 原聊天窗口", exact: true });
-  const headerUpdate = muse.getByRole("button", { name: "查看软件更新进度", exact: true });
-  await expect(headerUpdate).toContainText("软件更新 51%");
-  await page.evaluate(() => {
-    const fixture = (window as Window & { updateFixture: UpdateFixture }).updateFixture;
-    fixture.status = { ...fixture.status, downloadedBytes: 63 * 1024 * 1024, percent: 63 };
-  });
-  await expect(headerUpdate).toContainText("软件更新 63%");
-  await expect(headerUpdate.getByRole("progressbar")).toHaveAttribute("value", "63");
-  await page.setViewportSize({ width: 1000, height: 720 });
-  await expect.poll(() => headerUpdate.evaluate(element => {
-    const rect = element.getBoundingClientRect(), panel = element.closest(".canvas-service-panel")!;
-    const panelBounds = panel.getBoundingClientRect(), surface = panel.querySelector(".canvas-service-native-view")!.getBoundingClientRect();
-    const tools = panel.querySelector(".canvas-service-panel-tools")!.getBoundingClientRect();
-    const native = (window as Window & { updateFixture: UpdateFixture }).updateFixture.calls
-      .filter(call => ["show_service_webview", "set_service_webview_bounds"].includes(call.command) && call.args.service === "muse").at(-1)?.args;
-    return !!native && rect.bottom <= surface.top && rect.bottom <= Number(native.y)
-      && rect.left >= panelBounds.left && tools.right <= panelBounds.right;
-  })).toBe(true);
-  await muse.locator(".canvas-service-panel-header").screenshot({ path: testInfo.outputPath("native-browser-update-header.png") });
-  await headerUpdate.click();
-  await expect(muse).toHaveCount(0);
+  await background.getByRole("button", { name: "查看进度", exact: true }).click();
   await expect(dialog).toHaveCount(1);
   await expect(background).toHaveCount(0);
-  await expect(dialog.getByRole("progressbar")).toHaveAttribute("value", "63");
+  await expect(dialog.getByRole("progressbar")).toHaveAttribute("value", "51");
   await expect(dialog.getByRole("button", { name: "正在更新…", exact: true })).toBeDisabled();
-  expect((await commands(page)).filter(call => call.command === "open_software_update")).toHaveLength(1);
-  await page.setViewportSize({ width: 1600, height: 1000 });
   await dialog.getByRole("button", { name: "关闭", exact: true }).click();
   for (const [phase, message] of [["verifying", "正在校验安装包…"], ["saving", "正在保存项目，准备安装更新…"], ["installing", "正在启动新版安装程序…"]]) {
     await page.evaluate(({ phase, message }) => {

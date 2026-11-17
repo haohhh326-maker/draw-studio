@@ -2,7 +2,6 @@ import { useCallback, useEffect, useLayoutEffect, useRef, useState, type Pointer
 import { Minus, Plus, RefreshCw, X } from "lucide-react";
 import { hasNativeWebview, nativeWebviewInvoke } from "./native-webview-bridge";
 import { primeNativeServiceAuth } from "./service-auth";
-import { openSoftwareUpdate, softwareUpdateMessage, updateIsActive, useSoftwareUpdateView } from "../updates/software-update-client";
 import "./canvas-service-panel.css";
 
 export type CanvasService = "muse" | "deepseek";
@@ -34,15 +33,6 @@ export function NativeCanvasServicePanel({ service, onClose }: { service: Canvas
   const [zoom, setZoom] = useState(1);
   const desktop = hasNativeWebview();
   const name = service === "muse" ? "Muse" : "DeepSeek";
-  const update = useSoftwareUpdateView();
-  const updatePhase = update.status?.phase;
-  const updateVisible = update.pending || updateIsActive(update.status) && updatePhase !== "checking"
-    || update.actionStarted && (!!update.error || updatePhase === "error");
-  const updatePercent = typeof update.status?.percent === "number" && Number.isFinite(update.status.percent)
-    ? Math.max(0, Math.min(100, update.status.percent)) : undefined;
-  const updateLabel = update.preparing || updatePhase === "saving" ? "保存中"
-    : updatePhase === "verifying" ? "校验中" : updatePhase === "installing" ? "安装中"
-    : update.error || updatePhase === "error" ? "失败" : updatePercent === undefined ? "下载中" : `${Math.floor(updatePercent)}%`;
 
   useEffect(() => {
     const element = surface.current;
@@ -193,11 +183,6 @@ export function NativeCanvasServicePanel({ service, onClose }: { service: Canvas
         {error && <span className="canvas-service-header-error" role="alert" title={error}>{error}</span>}
       </div>
       <div className="canvas-service-panel-tools">
-        {updateVisible && <button type="button" className="canvas-service-update" aria-label="查看软件更新进度"
-          title={softwareUpdateMessage(update)} data-error={!!update.error || updatePhase === "error"} onClick={openSoftwareUpdate}>
-          <span>软件更新 {updateLabel}</span>
-          <progress aria-label="软件更新下载进度" max={100} value={update.preparing ? undefined : updatePercent} />
-        </button>}
         <button type="button" className="icon-button canvas-service-zoom-button" title="缩小网页" aria-label="缩小网页"
           disabled={zoom <= 0.5} onClick={() => void changeZoom(Math.max(0.5, Number((zoom - 0.25).toFixed(2))))}><Minus size={17} /></button>
         <span className="canvas-service-zoom-label">{Math.round(zoom * 100)}%</span>
