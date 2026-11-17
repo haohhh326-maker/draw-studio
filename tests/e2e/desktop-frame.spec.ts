@@ -194,7 +194,10 @@ test("desktop portals and native webpage bounds remain below the caption on resi
   await fixture(page, "desktop"); await openProject(page);
   await page.setViewportSize({ width: 1100, height: 720 });
   const gap = await expectToolbarGapPassThrough(page);
-  await page.getByRole("button", { name: "远程连接", exact: true }).click();
+  await page.locator(".react-flow__pane").click({ button: "right", position: { x: 400, y: 260 } });
+  await page.getByRole("menuitem", { name: /^图像/ }).click();
+  await page.locator(".react-flow__node").click();
+  await page.getByRole("button", { name: "选择当前节点算力", exact: true }).click();
   const compute = page.getByRole("dialog", { name: "选择算力", exact: true }); await expect(compute).toBeVisible();
   const placement = await compute.evaluate(element => ({ y: element.getBoundingClientRect().top,
     cssTop: parseFloat(getComputedStyle(element).top), bottom: element.getBoundingClientRect().bottom,
