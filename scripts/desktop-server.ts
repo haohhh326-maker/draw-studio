@@ -9,7 +9,6 @@ import { aifisherWorkflowReaderPlugin } from "./aifisher-workflow-reader-plugin"
 import { cloudFileTransferPlugin } from "./cloud-file-transfer-plugin";
 import { deepSeekBridgePlugin } from "./deepseek-bridge-plugin";
 import { autoDLPowerPlugin } from "./autodl-power-plugin";
-import { isAutoDLBridgeRequest } from "./autodl-extension-broker";
 import { museBridgePlugin } from "./muse-bridge-plugin";
 import { promptOptimizationPlugin } from "./prompt-optimization-plugin";
 import { runningHubNativeProxyPlugin } from "./runninghub-native-proxy-plugin";
@@ -111,7 +110,7 @@ export async function startDesktopServer(options: DesktopServerOptions) {
   if (!(await stat(path.join(distDir, "index.html"))).isFile()) throw new Error("桌面应用页面文件不完整。");
   const stack: Middleware[] = [];
   const server = createServer((request, response) => {
-    if (!trustedCanvasRequest(request) && !isAutoDLBridgeRequest(request)) { respond(response, 403, { error: "桌面服务只允许本机画布同源访问。" }); return; }
+    if (!trustedCanvasRequest(request)) { respond(response, 403, { error: "桌面服务只允许本机画布同源访问。" }); return; }
     let index = 0;
     const next = (error?: unknown) => {
       if (error) { respond(response, 500, { error: "本机服务未能完成此操作，请重试。" }); return; }
@@ -134,7 +133,7 @@ export async function startDesktopServer(options: DesktopServerOptions) {
   });
   const middlewares = { use(handler: Middleware) { stack.push(handler); return middlewares; } };
   const context = { config: { base: "/" }, httpServer: server, middlewares, close } as unknown as PreviewServer;
-  const plugins: Plugin[] = [museBridgePlugin(rootDir), deepSeekBridgePlugin(rootDir), autoDLPowerPlugin(rootDir), videoPlaybackPlugin(),
+  const plugins: Plugin[] = [museBridgePlugin(rootDir), deepSeekBridgePlugin(rootDir), autoDLPowerPlugin(rootDir, { browserAccount: true }), videoPlaybackPlugin(),
     aifisherWorkflowReaderPlugin(rootDir), workflowLibraryPlugin(rootDir), promptOptimizationPlugin(rootDir),
     runningHubProxyPlugin(), runningHubNativeProxyPlugin(), cloudFileTransferPlugin(rootDir)];
   const afterStatic: (() => void)[] = [];

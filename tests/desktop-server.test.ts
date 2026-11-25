@@ -4,6 +4,7 @@ import { mkdir, mkdtemp, readFile, rm, symlink, writeFile } from "node:fs/promis
 import { createRequire } from "node:module";
 import os from "node:os";
 import path from "node:path";
+import { chromium } from "playwright";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { startDesktopServer } from "../scripts/desktop-server";
 import { AUTODL_EXTENSION_ORIGIN } from "../scripts/autodl-extension-broker";
@@ -74,16 +75,30 @@ describe("standalone production desktop server", () => {
     await symlink(app.rootDir, path.join(app.distDir, "outside"), process.platform === "win32" ? "junction" : "dir");
     expect((await send(app.port, "/outside/workflow-library.settings.json")).status).toBe(403);
   });
-  it("allows the AutoDL browser extension on its pairing routes only", async () => {
+  it("opens the independent AutoDL browser from the desktop canvas without exposing extension routes", async () => {
     const app = await fixture();
-    const headers = { Origin: AUTODL_EXTENSION_ORIGIN, "Content-Type": "application/json" };
-    const pairing = "/__canvas/autodl/bridge/pair";
-    const preflight = await send(app.port, pairing, { method: "OPTIONS", headers });
-    expect(preflight.status).toBe(204);
-    expect(preflight.headers["access-control-allow-origin"]).toBe(AUTODL_EXTENSION_ORIGIN);
-    expect((await send(app.port, pairing, { method: "POST", headers, body: { code: "12345678" } })).status).toBe(401);
-    expect((await send(app.port, "/__canvas/autodl/pair-code", { method: "POST", headers, body: {} })).status).toBe(403);
-    expect((await send(app.port, "/", { headers })).status).toBe(403);
+    const canvas = { Origin: new URL(app.url).origin, "Content-Type": "application/json" };
+    const extension = { ...canvas, Origin: AUTODL_EXTENSION_ORIGIN };
+    const browser = path.join(app.folder, "bundled-browser", "chrome.exe");
+    vi.stubEnv("DRAW_STUDIO_BROWSER_EXECUTABLE", browser);
+    const launch = vi.spyOn(chromium, "launchPersistentContext").mockRejectedValue(new Error("fixture browser unavailable"));
+    try {
+      const session = await send(app.port, "/__canvas/autodl/session", { headers: canvas });
+      expect(session.status).toBe(200);
+      expect(JSON.parse(session.body)).toMatchObject({ status: "disconnected", message: expect.stringContaining("独立官网窗口") });
+      expect(launch).not.toHaveBeenCalled();
+      const blocked = await send(app.port, "/__canvas/autodl/bridge/pair", { method: "OPTIONS", headers: extension });
+      expect(blocked.status).toBe(403);
+      expect(blocked.headers["access-control-allow-origin"]).toBeUndefined();
+      expect((await send(app.port, "/__canvas/autodl/pair-code", { method: "POST", headers: canvas, body: {} })).status).toBe(404);
+      expect((await send(app.port, "/__canvas/autodl/open-account", { method: "POST", headers: extension, body: {} })).status).toBe(403);
+      expect(launch).not.toHaveBeenCalled();
+      const opened = await send(app.port, "/__canvas/autodl/open-account", { method: "POST", headers: canvas, body: {} });
+      expect(opened.status).toBe(503);
+      expect(JSON.parse(opened.body).error).toContain("无法启动 AutoDL.Art 专用浏览器");
+      expect(launch).toHaveBeenCalledExactlyOnceWith(expect.stringMatching(/[/\\]autodl-power[/\\]browser-profile$/),
+        expect.objectContaining({ executablePath: browser, headless: false, chromiumSandbox: true }));
+    } finally { launch.mockRestore(); }
   });
   it("registers the real library, AIFISHER reader, optimization, cloud and browser APIs", async () => {
     const app = await fixture(), headers = { "Content-Type": "application/json", Origin: app.url.slice(0, -1) };
