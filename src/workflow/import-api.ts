@@ -3,6 +3,7 @@ import { apiGraph } from "./library-converter";
 import { workflowImportInputSchema } from "./import-editor";
 import { validateImportGraph } from "./import-analyzer";
 import { repairApiWorkflowFromEditor } from "./import-repair";
+import { comfyArtifactRoot } from "./comfy-artifact";
 
 type Data = Record<string, unknown>;
 type Wire = [string, number];
@@ -68,7 +69,7 @@ function embeddedEditors(source: Data): Data[] {
   const metadata = record(source.metadata) ? source.metadata : {};
   // Some single-file envelopes save editor nodes beside an authoritative prompt.
   // Remove prompt only in this metadata copy so format detection sees the editor.
-  const topEditor = record(source.prompt) && Array.isArray(source.nodes) ? Object.fromEntries(Object.entries(source).filter(([key]) => key !== "prompt")) : undefined;
+  const topEditor = comfyArtifactRoot(source) !== source && Array.isArray(source.nodes) ? Object.fromEntries(Object.entries(source).filter(([key]) => key !== "prompt")) : undefined;
   return [topEditor, source.workflow, png.workflow, extraPng.workflow, metadata.workflow].map(editorValue).filter((value): value is Data => !!value);
 }
 function declaredDefault(raw: unknown, field: string): unknown {
@@ -95,11 +96,7 @@ function declaredDefault(raw: unknown, field: string): unknown {
 /** Read the saved API contract without guessing fields or interpreting plugin data. */
 export function apiWorkflowSourceGraph(source: unknown): ApiWorkflow {
   if (!record(source)) throw new Error("API 工作流必须为对象。");
-  // A bare prompt may carry editor metadata beside node entries. Strip only
-  // recognized metadata, never an unrecognized plugin or malformed node.
-  const metadataKeys = new Set(["workflow", "extra_pnginfo", "extra_data", "metadata"]);
-  const input = record(source.prompt) ? source.prompt : Object.fromEntries(Object.entries(source).filter(([key, value]) => !metadataKeys.has(key) || (record(value) && (Object.hasOwn(value, "class_type") || Object.hasOwn(value, "inputs")))));
-  return apiGraph(input);
+  return apiGraph(source);
 }
 
 /** Prepare one API file. Existing API values and every branch remain authoritative. */

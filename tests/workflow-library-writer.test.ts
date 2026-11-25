@@ -7,6 +7,7 @@ import os from "node:os";
 import path from "node:path";
 import { findManagedWorkflowImportFolder, migrateManagedWorkflowImportFolders, readWorkflowLibraryImportSource, resolveWorkflowLibraryImport, validateManagedWorkflowImport, writeWorkflowLibraryImport, type WorkflowImportRequest } from "../scripts/workflow-library-writer";
 import { readWorkflowLibrary } from "../scripts/workflow-library-reader";
+import { deleteWorkflowLibraryFolder } from "../scripts/workflow-library-delete";
 import { workflowLibraryPlugin } from "../scripts/workflow-library-plugin";
 import { buildWorkflowImport } from "../src/workflow/import-analyzer";
 import { convertEditorWorkflow } from "../src/workflow/import-editor";
@@ -15,7 +16,10 @@ import { readAIFisherWorkflow } from "../scripts/aifisher-workflow-reader";
 import type { AifisherWorkflowReadResult } from "../src/workflow/aifisher-reader-client";
 import { workflowModelFolderStem } from "../src/workflow/import-folder-name";
 
-const failures = vi.hoisted(() => ({ commit: false, migration: false, migrationMoves: 0 }));
+const failures = vi.hoisted(() => ({
+  commit: false, migration: false, migrationMoves: 0,
+  pauseAfterBackup: undefined as (() => Promise<void>) | undefined,
+}));
 // Exercise the actual pinned server reader without a browser fetch or network.
 const prepareWorkflowImport = (source: unknown, filename: string, info?: Record<string, unknown>) =>
   prepareWorkflowImportWithReader(source, filename, info, async request => await readAIFisherWorkflow(request) as AifisherWorkflowReadResult);
@@ -24,12 +28,13 @@ vi.mock("node:fs/promises", async importOriginal => {
   return { ...actual, rename: async (source: string, target: string) => {
     if (failures.commit && path.basename(source).startsWith(".canvas-import-") && !path.basename(source).startsWith(".canvas-import-backup-") && !path.basename(target).startsWith(".canvas-import-")) throw Object.assign(new Error("simulated commit failure"), { code: "EIO" });
     if (failures.migration && path.basename(source).startsWith("Custom-") && !path.basename(target).startsWith("Custom-") && ++failures.migrationMoves === 2) throw Object.assign(new Error("simulated migration failure"), { code: "EIO" });
-    return actual.rename(source, target);
+    await actual.rename(source, target);
+    if (path.basename(target).startsWith(".canvas-import-backup-")) await failures.pauseAfterBackup?.();
   } };
 });
 
 const temporary: string[] = [];
-afterEach(async () => { failures.commit = false; failures.migration = false; failures.migrationMoves = 0; await Promise.all(temporary.splice(0).map(folder => rm(folder, { recursive: true, force: true }))); });
+afterEach(async () => { failures.commit = false; failures.migration = false; failures.migrationMoves = 0; failures.pauseAfterBackup = undefined; await Promise.all(temporary.splice(0).map(folder => rm(folder, { recursive: true, force: true }))); });
 async function fixtureRoot() {
   const root = await mkdtemp(path.join(os.tmpdir(), "canvas-import-test-"));
   temporary.push(root); return root;
@@ -119,6 +124,34 @@ describe("readable model import directories", () => {
     expect(JSON.parse(await readFile(path.join(renamed, "workflow.config.json"), "utf8")).importReader)
       .toMatchObject({ revision: "bdcf3bec054594fcab591952a8c5acef858d6de4", compileStatus: "unsupported-version" });
     expect(JSON.parse(await readFile(path.join(renamed, "source.json"), "utf8"))).toEqual(source);
+  });
+
+  it("preserves a pending publisher locator, then validates and applies it when the schema becomes available", async () => {
+    const root = await fixtureRoot();
+    const source = { version: 0.4, nodes: [
+      { id: 49, type: "OwnImageGenerator", pos: [0, 0], widgets_values: { prompt: "scene description" }, inputs: [], outputs: [{ type: "IMAGE", links: [1] }] },
+      { id: 79, type: "SaveImage", pos: [400, 0], widgets_values: { filename_prefix: "prefix" }, inputs: [{ name: "images", type: "IMAGE", link: 1 }], outputs: [] },
+    ], links: [[1, 49, 0, 79, 0, "IMAGE"]] };
+    const locator = { nodeId: "49", field: "prompt" };
+    const initial = await prepareWorkflowImport(source, "pending-publisher.json");
+    expect(initial.importState.status).toBe("pending");
+    initial.config.importPublishedPrompt = { ...locator, sample: "discard publisher text" };
+    const saved = await writeWorkflowLibraryImport(root, initial);
+    const pending = await readWorkflowLibraryImportSource(root, saved.workflowId);
+    expect(pending.config.importPublishedPrompt).toEqual(locator);
+    const info = {
+      OwnImageGenerator: { input: { required: { prompt: ["STRING"] } }, output: ["IMAGE"] },
+      SaveImage: { input: { required: { images: ["IMAGE"], filename_prefix: ["STRING"] } }, output: [], output_node: true },
+    };
+    const upgrade = await prepareWorkflowImport(source, "upload-without-locator.json", info);
+    expect(upgrade.importState.status, JSON.stringify(upgrade.importState.diagnostics)).toBe("ready");
+    expect(await writeWorkflowLibraryImport(root, { ...upgrade, reuseExisting: true })).toMatchObject({ path: saved.path, status: "pending", reused: true });
+    expect(await resolveWorkflowLibraryImport(root, { workflowId: saved.workflowId, objectInfo: info }))
+      .toMatchObject({ workflowId: saved.workflowId, path: saved.path, status: "ready", updated: true });
+    const actual = await readWorkflowLibraryImportSource(root, saved.workflowId);
+    expect(actual.config).toMatchObject({ importPublishedPrompt: locator, prompt: { binding: { nodeId: "49", path: "inputs.prompt" } } });
+    expect(actual.source).toEqual(source);
+    expect(await readdir(root)).toEqual([saved.folder]);
   });
 
   it("previews and migrates a verified legacy directory without changing any bytes or timestamps", async () => {
@@ -344,6 +377,100 @@ describe("workflow import packages", () => {
     expect(results.find(result => result.status === "rejected")).toMatchObject({ reason: { status: 409 } });
     expect((await readWorkflowLibrary(root)).workflows).toHaveLength(1);
   });
+  it.each([false, true])("keeps a concurrent reload consistent while a package replacement waits (rollback=%s)", async rollback => {
+    const root = await fixtureRoot();
+    const original = importRequest();
+    const saved = await writeWorkflowLibraryImport(root, original);
+    const before = await readWorkflowLibrary(root);
+    const request = importRequest();
+    request.config.nameLabel = "更新后的名称";
+    request.overwrite = true;
+    let announceBackup!: () => void, releaseBackup!: () => void;
+    const inBackup = new Promise<void>(resolve => { announceBackup = resolve; });
+    const resume = new Promise<void>(resolve => { releaseBackup = resolve; });
+    failures.commit = rollback;
+    failures.pauseAfterBackup = () => { announceBackup(); return resume; };
+    const commit = Promise.allSettled([writeWorkflowLibraryImport(root, request)]);
+    await inBackup;
+    const reads = Array.from({ length: 4 }, () => readWorkflowLibrary(root));
+    let timeout: ReturnType<typeof setTimeout> | undefined;
+    let escaped: boolean;
+    try {
+      escaped = await Promise.race([
+        reads[0].then(() => true),
+        new Promise<boolean>(resolve => { timeout = setTimeout(() => resolve(false), 150); }),
+      ]);
+    } finally {
+      clearTimeout(timeout);
+      releaseBackup();
+    }
+    const [result] = await commit;
+    const snapshots = await Promise.all(reads);
+    expect(escaped).toBe(false);
+    expect(result.status).toBe(rollback ? "rejected" : "fulfilled");
+    for (const snapshot of snapshots) {
+      expect(snapshot.issues).toEqual([]);
+      expect(snapshot.workflows).toHaveLength(1);
+      expect(snapshot.workflows[0]).toMatchObject({
+        name: rollback ? original.config.nameLabel : request.config.nameLabel,
+        original: { id: saved.workflowId },
+        template: before.workflows[0].template,
+      });
+    }
+    expect((await readWorkflowLibraryImportSource(root, saved.workflowId)).source).toEqual(original.source);
+    expect(await readdir(root)).toEqual([saved.folder]);
+  });
+  it("preserves every surviving package through mixed reload, overwrite, delete, retry and reimport", async () => {
+    const root = await fixtureRoot();
+    const requests = await Promise.all(Array.from({ length: 15 }, (_, index) =>
+      prepareWorkflowImport(modelGraph(undefined, "mixed pressure fixture " + index), "same-name.json")));
+    const initial = await Promise.all(requests.slice(0, 12).map(request => writeWorkflowLibraryImport(root, request)));
+    const before = await readWorkflowLibrary(root);
+    const deletions = new Map(before.workflows.map(workflow => [workflow.original!.id, {
+      workflowId: workflow.original!.id, folder: workflow.library!.folder, configSha256: workflow.original!.configSha256,
+    }]));
+    const updates = requests.slice(0, 4).map((request, index) => ({
+      ...request, overwrite: true, config: { ...request.config, nameLabel: "更新名称 " + index },
+    }));
+    const survivors = new Set(initial.slice(8).map(result => result.workflowId));
+    const malformed = { ...updates[0], graph: { missing: { class_type: "NotAnOutput", inputs: {} } } };
+    const invalid = expect(writeWorkflowLibraryImport(root, malformed)).rejects.toMatchObject({ status: 400 });
+
+    const result = await Promise.all([
+      Promise.all(updates.map(request => writeWorkflowLibraryImport(root, request))),
+      Promise.all(initial.slice(4, 8).map(item => deleteWorkflowLibraryFolder(root, deletions.get(item.workflowId)!))),
+      Promise.all(requests.slice(8, 12).map(request => writeWorkflowLibraryImport(root, { ...request, reuseExisting: true }))),
+      Promise.all(requests.slice(12).map(request => writeWorkflowLibraryImport(root, request))),
+      Promise.all(Array.from({ length: 6 }, () => readWorkflowLibrary(root))),
+      invalid,
+    ]);
+    expect(result[0].every(item => item.updated)).toBe(true);
+    expect(result[1].every(item => item.deleted)).toBe(true);
+    expect(result[2].every(item => item.reused)).toBe(true);
+    for (const snapshot of result[4]) {
+      expect(snapshot.issues).toEqual([]);
+      expect(snapshot.workflows.every(workflow => !!workflow.template)).toBe(true);
+      expect(snapshot.workflows.filter(workflow => survivors.has(workflow.original!.id))).toHaveLength(4);
+    }
+    await Promise.all(initial.slice(0, 4).map(item =>
+      expect(deleteWorkflowLibraryFolder(root, deletions.get(item.workflowId)!)).rejects.toMatchObject({ status: 409 })));
+    await Promise.all(requests.slice(4, 6).map(request => writeWorkflowLibraryImport(root, { ...request, reuseExisting: true })));
+    const final = await readWorkflowLibrary(root);
+    const expected = requests.filter((_, index) => index < 6 || index > 7);
+    expect(final.issues).toEqual([]);
+    expect(new Set(final.workflows.map(workflow => workflow.original!.id))).toEqual(new Set(expected.map(request => request.config.id)));
+    expect(final.workflows).toHaveLength(13);
+    await Promise.all(expected.map(async (request) => {
+      const stored = await readWorkflowLibraryImportSource(root, String(request.config.id));
+      expect(stored.source).toEqual(request.source);
+      const item = final.workflows.find(workflow => workflow.original!.id === request.config.id)!;
+      expect(item.template).toBeDefined();
+      const files = await packageBytes(path.join(root, item.library!.folder));
+      expect(Object.keys(files)).toHaveLength(5);
+      expect(JSON.parse(files["execution.api.json"].toString())).toEqual(request.graph);
+    }));
+    expect(await readdir(root)).toHaveLength(13);
+  }, 20_000);
   it("never replaces unowned directories or an original workflow sharing an id", async () => {
     const root = await fixtureRoot(), target = path.join(root, "Custom-0123456789abcdef"); await mkdir(target);
     await writeFile(path.join(target, "original.txt"), "preserve");

@@ -5,6 +5,7 @@ import path from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { autoDLPowerHandler, autoDLPowerPlugin } from "../scripts/autodl-power-plugin";
 import { createAutoDLPowerService, type AutoDLPowerService } from "../scripts/autodl-power-service";
+import { AUTODL_EXTENSION_ORIGIN } from "../scripts/autodl-extension-broker";
 
 const fixtures: { root: string; server: Server; service: AutoDLPowerService }[] = [];
 const settings = { enabled: true, endpoint: "https://comfy.fixture.invalid", instanceUuid: "pro-fixture123", apiToken: "private-fixture-token" };
@@ -44,7 +45,7 @@ describe("local AutoDL power routes", () => {
     const app = await fixture();
     expect((await app.send("status")).value).toMatchObject({ phase: "disabled", activeTasks: 0 });
     const saved = await app.send("settings", "POST", settings); expect(saved.status).toBe(200); expect(JSON.stringify(saved.value)).not.toContain(settings.apiToken);
-    const status = await app.send("status"); expect(status.headers["cache-control"]).toBe("no-store"); expect(status.value.settings.tokenConfigured).toBe(true);
+    const status = await app.send("status"); expect(status.headers["cache-control"]).toBe("no-store"); expect(status.value.settings.tokenConfigured).toBe(false);
     expect(app.platform.status).not.toHaveBeenCalled(); expect(app.platform.powerOn).not.toHaveBeenCalled(); expect(app.platform.powerOff).not.toHaveBeenCalled();
   });
   it("checks credentials without power commands and handles the complete lease route contract", async () => {
@@ -96,12 +97,20 @@ describe("local AutoDL power routes", () => {
     expect((await app.send("acquire", "POST", { endpoint: settings.endpoint })).status).toBe(400);
     expect(app.platform.powerOn).not.toHaveBeenCalled(); expect(app.platform.powerOff).not.toHaveBeenCalled();
   });
+  it("passes only the new safe diagnostic fields through the authenticated bridge result route", async () => {
+    const app = await fixture(), headers = { Origin: AUTODL_EXTENSION_ORIGIN };
+    const result = { bridgeKey: "0".repeat(64), id: "fixture", ok: false, errorCode: "NO_GPU_CAPACITY", remoteCode: "InternalError", httpStatus: 200 };
+    // The schema must accept diagnostic keys, then reject the unauthenticated key.
+    expect((await app.send("bridge/result", "POST", result, headers)).status).toBe(401);
+    expect((await app.send("bridge/result", "POST", { ...result, responseBody: "must-not-be-relayed" }, headers)).status).toBe(400);
+    expect(app.platform.powerOn).not.toHaveBeenCalled(); expect(app.platform.powerOff).not.toHaveBeenCalled();
+  });
   it("rejects invalid content types, broken JSON and oversized metadata", async () => {
     const app = await fixture();
     expect((await app.send("settings", "POST", settings, { "Content-Type": "text/plain" })).status).toBe(415);
     expect((await app.send("settings", "POST", "{")).status).toBe(400);
     expect((await app.send("settings", "POST", [])).status).toBe(400);
-    expect((await app.send("settings", "POST", { data: "x".repeat(20_000) })).status).toBe(413);
+    expect((await app.send("settings", "POST", { data: "x".repeat(1024 * 1024 + 1) })).status).toBe(413);
     expect(app.platform.status).not.toHaveBeenCalled();
   });
   it("redacts platform errors rather than returning the developer token", async () => {

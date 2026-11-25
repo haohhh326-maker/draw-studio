@@ -1,7 +1,8 @@
 import { createHash, randomUUID } from "node:crypto";
 import { lstat, readFile, readdir, realpath, rename, rm } from "node:fs/promises";
 import path from "node:path";
-import { serializedWorkflowLibraryRoot, WorkflowImportError } from "./workflow-library-writer";
+import { WorkflowImportError } from "./workflow-library-writer";
+import { serializedWorkflowLibraryRoot } from "./workflow-library-queue";
 
 export type WorkflowDeleteRequest = { workflowId: string; folder: string; configSha256: string };
 export type WorkflowDeleteResult = { workflowId: string; folder: string; deleted: true };

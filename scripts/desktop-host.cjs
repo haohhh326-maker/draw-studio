@@ -1,4 +1,4 @@
-const { app, BrowserWindow, WebContentsView, ipcMain, dialog, Menu } = require("electron");
+const { app, BrowserWindow, WebContentsView, ipcMain, dialog, Menu, shell } = require("electron");
 const { fork } = require("node:child_process");
 const { randomUUID } = require("node:crypto");
 const path = require("node:path");
@@ -238,7 +238,10 @@ if (hasLock) app.whenReady().then(async () => {
     webPreferences: { preload: path.join(__dirname, "desktop-preload.cjs"), contextIsolation: true,
       nodeIntegration: false, sandbox: true, webSecurity: true },
   });
-  mainWindow.webContents.setWindowOpenHandler(() => ({ action: "deny" }));
+  mainWindow.webContents.setWindowOpenHandler(({ url }) => {
+    if (url === "https://www.autodl.art/app/deploy") void shell.openExternal(url).catch(() => {});
+    return { action: "deny" };
+  });
   mainWindow.webContents.on("will-navigate", (event, url) => { if (!url.startsWith(canvasUrl)) event.preventDefault(); });
   updates = createSoftwareUpdates({ app, dialog, userData: app.getPath("userData"), owner: () => mainWindow,
     defaultsFile: path.join(resources, "software-update.defaults.json"), beforeInstall: saveBeforeExit });

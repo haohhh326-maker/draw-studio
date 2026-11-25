@@ -140,7 +140,8 @@ export function preserveRunningHubWorkflowMetadata(incoming: WorkflowDefinition,
     ...(current.platformCategoryReader || previous.platformCategoryReader ? { platformCategoryReader: current.platformCategoryReader || previous.platformCategoryReader } : {}),
   };
   let name = incoming.name;
-  if (current.nameSource !== "custom" && (!name.trim() || isGenericRunningHubWorkflowName(incoming))) {
+  const keepCustomName = previous.nameSource === "custom" && current.nameSource === "platform" && sameRunningHubCatalogSource(incoming, existing!);
+  if (keepCustomName || current.nameSource !== "custom" && (!name.trim() || isGenericRunningHubWorkflowName(incoming))) {
     name = existing!.name;
     runninghub.nameSource = previous.nameSource;
   } else if (name !== existing!.name && name !== runninghub.platformName) {

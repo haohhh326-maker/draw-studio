@@ -189,6 +189,7 @@
   scrollbar-width: thin;
 }
 .node-execution-phase { font-size: var(--font-size-body); font-weight: 500; }
+.node-execution-note { margin: 0; color: var(--text-secondary); font-size: var(--font-size-caption); line-height: 1.5; }
 .node-execution-current { display: grid; gap: 3px; max-width: 100%; font-size: var(--font-size-caption); }
 .node-execution-current small,
 .node-execution-meta { color: var(--text-secondary); font-size: var(--font-size-micro); }

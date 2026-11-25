@@ -10,6 +10,7 @@ import { RunningHubAccountSettings } from "../settings/RunningHubAccountSettings
 import { runningHubSite } from "../compute/providers";
 import { RunningHubClient, normalizeRunningHubBaseUrl } from "./client";
 import { readRunningHubRemoteWorkflow, prepareRunningHubRemoteWorkflow, remoteWorkflowPromptChoices, type RemoteRunningHubDraft } from "./remote-workflow";
+import { runningHubFieldKey } from "./import-review";
 import "./runninghub-workflows.css";
 import "./runninghub-remote-workflow.css";
 
@@ -147,7 +148,13 @@ export function RunningHubRemoteWorkflowManager({ onClose, inline = false }: { o
     {draft && <section className="rh-remote-draft" aria-label="远端工作流读取结果">
       <label>画布显示名称<input value={draft.name} maxLength={120} disabled={!!busy} onChange={event => setDraft({ ...draft, name: event.target.value })} /></label>
       <p>工作流 ID {draft.workflowId} · {Object.keys(draft.graph).length} 个节点 · {draft.reader.bindingCandidates.filter(field => field.mediaKind).length} 个素材输入 · {draft.outputs.length} 个输出</p>
-      <label>主提示词<select value={draft.promptKey} disabled={!!busy} onChange={event => setDraft({ ...draft, promptKey: event.target.value })}><option value="">不绑定主提示词</option>{remoteWorkflowPromptChoices(draft.reader).map(field => <option key={field.nodeId + "." + field.field} value={field.nodeId + "." + field.field}>{field.label} · {field.nodeId}.{field.field}</option>)}</select></label>
+      <label>主提示词<select value={draft.promptKey} disabled={!!busy} onChange={event => setDraft({ ...draft, promptKey: event.target.value })}>
+        <option value="">不绑定主提示词</option>
+        {remoteWorkflowPromptChoices(draft.reader).map(field => {
+          const key = runningHubFieldKey(field.nodeId, field.field);
+          return <option key={key} value={key}>{field.label} · {field.nodeId} / {field.field}</option>;
+        })}
+      </select></label>
       <div className="rh-remote-outputs">{draft.outputs.map((output, index) => <label key={output.nodeId + "." + output.field}>输出 {output.nodeId} · {draft.graph[output.nodeId]?.class_type}<select value={output.kind} disabled={!!busy} onChange={event => setDraft({ ...draft, outputs: draft.outputs.map((item, itemIndex) => itemIndex === index ? { ...item, kind: event.target.value as typeof item.kind } : item) })}>{Object.entries(kinds).map(([kind, label]) => <option key={kind} value={kind}>{label}</option>)}</select></label>)}</div>
       {!!draft.warnings.length && <details><summary>读取提示 {draft.warnings.length} 项</summary><ul>{draft.warnings.map((warning, index) => <li key={index}>{warning}</li>)}</ul></details>}
       <div className="rh-remote-actions"><button type="button" disabled={!!busy || !draft.name.trim() || !draft.outputs.length} onClick={() => void add()}>{busy ? "正在保存…" : inline ? "保存调整" : "添加到画布列表"}</button><button type="button" className="primary" disabled={!!busy || !draft.name.trim() || !draft.outputs.length} onClick={() => void add(true)}>{inline ? "在画布中使用" : "添加并在画布中使用"}</button></div>

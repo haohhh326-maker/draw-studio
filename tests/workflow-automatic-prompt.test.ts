@@ -6,6 +6,7 @@ import { convertLibraryWorkflow } from "../src/workflow/library-converter";
 import { buildWorkflow } from "../src/workflow-adapter/adapter";
 import { workflowSelectionPatch } from "../src/generation/workflow-selection";
 import type { ApiWorkflow, CanvasNode } from "../src/types";
+import type { PublishedWorkflowPrompt } from "../src/workflow/automatic-prompt-binding";
 
 const info = {
   TextValue: { input: { required: { value: ["STRING", { multiline: true }] } }, output: ["STRING"] },
@@ -22,7 +23,8 @@ const source: ApiWorkflow = {
   make: { class_type: "Generate", inputs: { positive: ["pa", 0], negative: ["nb", 0] } },
   save: { class_type: "SaveImage", inputs: { images: ["make", 0], filename_prefix: "result" } },
 };
-const prepare = (graph: ApiWorkflow) => prepareWorkflowImport(graph, "automatic_api.json", info, async request => await readAIFisherWorkflow(request) as AifisherWorkflowReadResult);
+const prepare = (graph: ApiWorkflow, publishedPrompt?: PublishedWorkflowPrompt) => prepareWorkflowImport(graph, "automatic_api.json", info,
+  async request => await readAIFisherWorkflow(request) as AifisherWorkflowReadResult, undefined, publishedPrompt);
 const origin = { sourcePath: "fixture", folder: "auto", configSha256: "fixture", executionSha256: "fixture", executionStatus: "plain" as const };
 
 describe("automatic canvas prompt adaptation after unchanged AIFISHER parsing", () => {
@@ -48,6 +50,33 @@ describe("automatic canvas prompt adaptation after unchanged AIFISHER parsing", 
     expect(prepared.config.prompt).toBeUndefined();
     expect((prepared.config.parameters as any[]).filter(p => ["a", "b"].includes(p.binding.nodeId))).toHaveLength(2);
     expect(prepared.graph).toEqual(graph);
+  });
+  it("uses the publisher's exact prompt and keeps another positive text independently editable", async () => {
+    const graph = structuredClone(source);
+    graph.merge = { class_type: "Merge", inputs: { a: ["pa", 0], b: ["nb", 0] } };
+    graph.make.inputs.positive = ["merge", 0];
+    delete graph.make.inputs.negative;
+    const publishedPrompt = { nodeId: "a", field: "value" };
+    const prepared = await prepare(graph, publishedPrompt);
+    expect(prepared.config.prompt).toMatchObject({ binding: { nodeId: "a", path: "inputs.value" } });
+    expect(prepared.config.importPublishedPrompt).toEqual(publishedPrompt);
+    expect(prepared.analysis.inputs).toEqual([]);
+    expect(prepared.analysis.prompts).toEqual(expect.arrayContaining([expect.objectContaining(publishedPrompt)]));
+    const workflow = convertLibraryWorkflow(prepared.config, prepared.graph, prepared.requirements, origin);
+    const other = workflow.mapping.find(mapping => mapping.nodeId === "b" && mapping.field === "value")!;
+    expect(other.semantic).not.toBe("prompt");
+    const built = buildWorkflow(workflow, { data: { generation: { prompt: "new subject", params: { [other.semantic]: "second instruction" } } } } as unknown as CanvasNode, [], {});
+    expect(built.workflow.a.inputs.value).toBe("new subject");
+    expect(built.workflow.b.inputs.value).toBe("second instruction");
+    expect(prepared.graph).toEqual(graph);
+  });
+  it("ignores publisher targets that are graph connections or are used for negative conditioning", async () => {
+    const connected = await prepare(source, { nodeId: "pa", field: "text" });
+    const negative = await prepare(source, { nodeId: "b", field: "value" });
+    for (const prepared of [connected, negative]) {
+      expect(prepared.config.prompt).toMatchObject({ binding: { nodeId: "a", path: "inputs.value" } });
+      expect(prepared.config.importPublishedPrompt).toBeUndefined();
+    }
   });
   it("never overwrites a shared positive/negative source as the main prompt", async () => {
     const graph = structuredClone(source);

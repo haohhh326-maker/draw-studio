@@ -6,6 +6,7 @@ import os from "node:os";
 import path from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { startDesktopServer } from "../scripts/desktop-server";
+import { AUTODL_EXTENSION_ORIGIN } from "../scripts/autodl-extension-broker";
 import type { NativeProxySocket } from "../scripts/runninghub-native-proxy-plugin";
 
 const servers: Awaited<ReturnType<typeof startDesktopServer>>[] = [], folders: string[] = [], clients: NativeProxySocket[] = [];
@@ -72,6 +73,17 @@ describe("standalone production desktop server", () => {
     expect((await send(app.port, "/%00")).status).toBe(400);
     await symlink(app.rootDir, path.join(app.distDir, "outside"), process.platform === "win32" ? "junction" : "dir");
     expect((await send(app.port, "/outside/workflow-library.settings.json")).status).toBe(403);
+  });
+  it("allows the AutoDL browser extension on its pairing routes only", async () => {
+    const app = await fixture();
+    const headers = { Origin: AUTODL_EXTENSION_ORIGIN, "Content-Type": "application/json" };
+    const pairing = "/__canvas/autodl/bridge/pair";
+    const preflight = await send(app.port, pairing, { method: "OPTIONS", headers });
+    expect(preflight.status).toBe(204);
+    expect(preflight.headers["access-control-allow-origin"]).toBe(AUTODL_EXTENSION_ORIGIN);
+    expect((await send(app.port, pairing, { method: "POST", headers, body: { code: "12345678" } })).status).toBe(401);
+    expect((await send(app.port, "/__canvas/autodl/pair-code", { method: "POST", headers, body: {} })).status).toBe(403);
+    expect((await send(app.port, "/", { headers })).status).toBe(403);
   });
   it("registers the real library, AIFISHER reader, optimization, cloud and browser APIs", async () => {
     const app = await fixture(), headers = { "Content-Type": "application/json", Origin: app.url.slice(0, -1) };

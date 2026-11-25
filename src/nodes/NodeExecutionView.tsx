@@ -10,6 +10,15 @@ export function NodeExecutionView({ task }: { task: TaskState }) {
   const localAbort = task.status === "cancelled" && /^(?:AbortError:\s*)?Aborted\.?$/i.test(task.error?.trim() ?? "");
   const error = localAbort || !task.error ? undefined : readableRunningHubError(task.error);
   const details = task.details !== "not-submitted" && !(localAbort && /^(?:AbortError:\s*)?Aborted\.?$/i.test(task.details?.trim() ?? "")) ? task.details : undefined;
+  const awaitingSubmission = task.status === "uploading" || task.status === "queued";
+  let powerPhase: string | undefined;
+  if (awaitingSubmission) {
+    if (details?.startsWith("AutoDL 当前算力规格暂无库存")) powerPhase = "等待 AutoDL 算力";
+    else if (details?.startsWith("正在核对 AutoDL 开机状态")) powerPhase = "核对 AutoDL 开机状态";
+    else if (details?.startsWith("正在启动 AutoDL 云端实例")) powerPhase = "启动 AutoDL";
+    else if (details?.startsWith("AutoDL 已开机，正在等待 ComfyUI")) powerPhase = "等待 ComfyUI 就绪";
+  }
+  const capacityUnavailable = task.status === "failed" && error?.includes("AutoDL") && error.includes("当前算力规格暂无库存");
   const execution = task.execution;
   const hasSteps = task.status === "generating" && execution?.value !== undefined && Number.isFinite(execution.value)
     && execution.max !== undefined && Number.isFinite(execution.max) && execution.max > 0;
@@ -36,7 +45,8 @@ export function NodeExecutionView({ task }: { task: TaskState }) {
         </div>
       </div>}
       <div className="node-execution-content">
-        <strong className="node-execution-phase">{phaseLabels[task.status]}</strong>
+        <strong className="node-execution-phase">{powerPhase ?? (capacityUnavailable ? "AutoDL 算力暂无库存" : phaseLabels[task.status])}</strong>
+        {powerPhase && <p className="node-execution-note">{details}</p>}
         {(nodeLabel || execution?.nodeId) && <div className="node-execution-current">
           {nodeLabel && <span>{nodeLabel}</span>}
           {execution?.nodeId && <small>#{execution.nodeId}{execution.nodeType && execution.nodeType !== nodeLabel ? ` · ${execution.nodeType}` : ""}</small>}
@@ -45,7 +55,7 @@ export function NodeExecutionView({ task }: { task: TaskState }) {
           <progress aria-label="当前 ComfyUI 节点进度" value={execution!.value} max={execution!.max} />
           <span>{execution!.value} / {execution!.max} · {Math.round(progress!)}%</span>
         </div>}
-        {busy && !hasSteps && <small className="node-execution-meta">{fill === undefined ? "等待平台进度" : task.status === "saving" ? task.savingMessage ?? "生成 100% · 正在保存结果" : `${Math.round(fill)}%`}</small>}
+        {busy && !hasSteps && !powerPhase && <small className="node-execution-meta">{fill === undefined ? "等待平台进度" : task.status === "saving" ? task.savingMessage ?? "生成 100% · 正在保存结果" : `${Math.round(fill)}%`}</small>}
         {busy && execution?.queueRemaining !== undefined && task.status === "queued" &&
           <small className="node-execution-meta">队列剩余 {execution.queueRemaining}</small>}
         {busy && completed > 0 && <small className="node-execution-meta">已执行 / 缓存 {completed} 个节点</small>}
@@ -55,7 +65,7 @@ export function NodeExecutionView({ task }: { task: TaskState }) {
             event.stopPropagation();
             useStore.setState({ modal: "runninghub-workflows" });
           }}>检查运行密钥</button>}
-        {details && <details className="node-execution-details nodrag">
+        {details && !powerPhase && <details className="node-execution-details nodrag">
           <summary>{task.status === "failed" ? "错误详情" : "任务详情"}</summary>
           <pre>{details}</pre>
         </details>}

@@ -39,6 +39,15 @@ describe("canvas node execution feedback", () => {
     expect(html).not.toContain("<progress");
     expect(html).not.toContain("75%");
   });
+  it("shows AutoDL startup verification on the card while the generation is waiting", () => {
+    const details = "正在核对 AutoDL 开机状态，等待平台更新。";
+    const html = render({ status: "uploading", details });
+    expect(html).toContain('role="status"');
+    expect(html).toContain("核对 AutoDL 开机状态</strong>");
+    expect(html).toContain(details);
+    expect(html).not.toContain("<details");
+    expect(html).not.toContain("生成失败");
+  });
   it("keeps zero progress valid and ignores invalid maxima", () => {
     expect(render({ status: "generating", execution: { value: 0, max: 20 } })).toContain("0 / 20 · 0%");
     expect(render({ status: "generating", execution: { value: 2, max: 0 } })).not.toContain("<progress");

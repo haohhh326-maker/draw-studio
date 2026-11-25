@@ -1,10 +1,11 @@
 import type { ApiWorkflow, WorkflowDefinition } from "../types";
 import type { ImportOutputBinding } from "../workflow/import-analyzer";
 import { aifisherReadResultFor } from "../workflow/aifisher-reader-client";
+import { automaticPromptCandidate } from "../workflow/automatic-prompt-binding";
 import { savedOutputContracts } from "../workflow/output-contracts";
 import { RunningHubClient, normalizeRunningHubBaseUrl } from "./client";
 import { attachRunningHubExecutionContract } from "./execution-contract";
-import { reviewRunningHubImportBindings } from "./import-review";
+import { reviewRunningHubImportBindings, runningHubFieldKey } from "./import-review";
 import { analyzeRunningHubUpstream, requireRunningHubReader, type RunningHubReaderResult } from "./upstream-reader";
 import { parseRunningHubWorkflowReference, prepareRunningHubWorkflow } from "./workflows";
 import { applyRunningHubWorkflowMetadata } from "./workflow-metadata";
@@ -57,17 +58,16 @@ export async function readRunningHubRemoteWorkflow(
   const workflowId = parseRunningHubWorkflowReference(reference, site);
   const graph = await client.getWorkflow(workflowId, signal);
   signal?.throwIfAborted();
-  const reader = requireRunningHubReader(aifisherReadResultFor(graph));
+  const read = aifisherReadResultFor(graph);
+  const reader = requireRunningHubReader(read);
   if (reader.environment !== "runninghub-workflow") throw new Error("请使用 RunningHub ComfyUI 工作流链接读取，AI 应用请从独立入口添加。");
   const analysis = analyzeRunningHubUpstream(reader);
   const review = reviewRunningHubImportBindings(graph, analysis, saved);
   const promptChoices = remoteWorkflowPromptChoices(reader);
-  // The upstream binding keys are generated (input_1, input_2, ...). A model
-  // filename can precede the prompt, so prefer an explicitly named text target.
-  const explicitPrompt = !saved && (promptChoices.find(field => /^(?:prompt|positive_prompt)$/i.test(field.field))
-    ?? promptChoices.find(field => /^(?:text|description)$/i.test(field.field)));
-  const selectedPrompt = explicitPrompt ? explicitPrompt.nodeId + "." + explicitPrompt.field : review.promptKey;
-  const promptKey = promptChoices.some(field => field.nodeId + "." + field.field === selectedPrompt) ? selectedPrompt : "";
+  const automaticPrompt = !saved && read ? automaticPromptCandidate(read) : undefined;
+  const selectedPrompt = saved ? review.promptKey
+    : automaticPrompt ? runningHubFieldKey(automaticPrompt.nodeId, automaticPrompt.fieldName) : "";
+  const promptKey = promptChoices.some(field => runningHubFieldKey(field.nodeId, field.field) === selectedPrompt) ? selectedPrompt : "";
   const outputs = review.outputs.map(output => {
     if (saved && output.kind !== "file") return output;
     const exact = savedOutputContracts[graph[output.nodeId]?.class_type];

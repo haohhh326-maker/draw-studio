@@ -76,7 +76,7 @@ describe("explicit ComfyUI import bindings", () => {
   });
   it("distinguishes read, binding and execution status even with a live schema", async () => {
     const prepared = await prepare();
-    expect(importReadiness(prepared, true)).toMatchObject({ read: "已读取并转换", bindings: "提示词已自动绑定；输出按运行结果识别", execution: expect.stringContaining("尚未验证") });
+    expect(importReadiness(prepared, true)).toMatchObject({ read: "已读取并转换", bindings: "提示词已自动绑定，输出按运行结果识别", execution: expect.stringContaining("尚未验证") });
     const applied = applyImportReview(prepared, initialImportReview(prepared));
     expect(importReadiness(applied, false)).toMatchObject({ bindings: "使用已保存的自定义绑定", execution: expect.stringContaining("未确认") });
   });

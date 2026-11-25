@@ -22,9 +22,10 @@ import { normalizeRunningHubInstanceType } from "../runninghub/instance-types";
 import { prepareNativeRunningHubMedia } from "../runninghub/native-media";
 import { normalizeNativeRunningHubOutputFields } from "../runninghub/native-output-fields";
 import { isRunningHubNativeConnection, NativeRunningHubAccountError, normalizeRunningHubNativeConnection } from "../runninghub/native-connection";
-import { activeConnection, executionWorkflows, computeEndpoint, runningHubSite, isRunningHubProvider, nodeComputeState } from "../compute/providers";
+import { activeConnection, executionWorkflows, computeEndpoint, runningHubSite, sameRunningHubSite, isRunningHubProvider, nodeComputeState } from "../compute/providers";
 import { generationPreparationIdentity } from "./preparation-context";
 import { autoDLTaskPower } from "../autodl/client";
+import { autoDLInstanceUuidFromEndpoint, sameAutoDLEndpoint } from "../autodl/endpoint";
 import { applyWorkflowCredentials, cleanWorkflowCredentials, credentialParameterValues, detectWorkflowCredentials, missingWorkflowCredentials, redactWorkflowCredentialText } from "../workflow/credentials";
 import {
   busyPhases,
@@ -76,16 +77,20 @@ function credentials(task: GenerationTask): Connection {
   const state = useStore.getState();
   const native = task.executorType === "comfyui" && isRunningHubNativeConnection(task.connection);
   const snapshot = native ? normalizeRunningHubNativeConnection({ ...task.connection, token: "" }) : { ...task.connection, token: "" };
-  const current = task.executorType === "runninghub"
-    ? computeEndpoint(state.runningHubConnection.baseUrl) === computeEndpoint(task.connection.baseUrl) ? state.runningHubConnection
-      : state.runningHubConnections[runningHubSite(task.connection.baseUrl)]
+  const runninghub = task.executorType === "runninghub";
+  const current = runninghub
+    ? sameRunningHubSite(state.runningHubConnection.baseUrl, snapshot.baseUrl) ? state.runningHubConnection
+      : state.runningHubConnections[runningHubSite(computeEndpoint(snapshot.baseUrl))]
     : native ? state.comfyConnectionProfiles.native
       : isRunningHubNativeConnection(state.connection) ? state.comfyConnectionProfiles.cloud : state.connection;
   const normalizedCurrent = isRunningHubNativeConnection(current) ? normalizeRunningHubNativeConnection(current) : current;
   // The two official CN tiers share credentials, but the task retains its original tier.
   const same = native ? isRunningHubNativeConnection(normalizedCurrent)
+    : runninghub ? sameRunningHubSite(normalizedCurrent.baseUrl, snapshot.baseUrl)
     : normalizedCurrent.baseUrl.replace(/\/$/, "") === snapshot.baseUrl.replace(/\/$/, "");
-  return { ...snapshot, token: same ? normalizedCurrent.token : "" };
+  const currentAutoDL = !native && task.executorType === "comfyui" && sameAutoDLEndpoint(normalizedCurrent.baseUrl, snapshot.baseUrl)
+    ? normalizedCurrent.autodl : undefined;
+  return { ...snapshot, token: same ? normalizedCurrent.token : "", autodl: snapshot.autodl ?? currentAutoDL };
 }
 export async function generate(canvasId: string, nodeId: string) {
   const state = nodeComputeState(useStore.getState(), canvasId, nodeId);
@@ -126,7 +131,7 @@ export async function generate(canvasId: string, nodeId: string) {
     if (!runninghub && isRunningHubNativeConnection(selectedConnection))
       throw new Error("RunningHub 原生 ComfyUI 入口已停用。请切换到独立的「RunningHub ComfyUI 工作流」，粘贴工作流链接后运行。已有任务仍可恢复查询。");
     const connection = isRunningHubNativeConnection(selectedConnection) ? normalizeRunningHubNativeConnection(selectedConnection) : selectedConnection;
-    if (runninghub && computeEndpoint(definition.runninghub!.baseUrl) !== computeEndpoint(connection.baseUrl))
+    if (runninghub && !sameRunningHubSite(definition.runninghub!.baseUrl, connection.baseUrl))
       throw new Error("该 RunningHub 工作流属于其他站点，请切换站点或重新添加。");
     if (runninghub && !connection.token.trim()) throw new Error("请先在算力设置中填写 RunningHub API Key。");
     if (definition.library?.importStatus === "pending")
@@ -364,7 +369,8 @@ async function execute(taskId: string, resume: boolean) {
       savingMessage: undefined,
     });
     executionSignal.throwIfAborted();
-    if (!runninghub && !native && client.connection.autodl?.instanceUuid) {
+    if (!runninghub && !native &&
+        (client.connection.autodl?.instanceUuid || autoDLInstanceUuidFromEndpoint(client.connection.baseUrl))) {
       autoDLLease = await autoDLTaskPower(client.connection, {
         taskId, attemptId: crypto.randomUUID(), signal: abort.signal,
         onStatus: message => patch({ details: message }),

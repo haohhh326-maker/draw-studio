@@ -63,6 +63,15 @@ describe("provider catalogs", () => {
     expect(activeWorkflows(current)).toEqual([rhCn]);
     expect(activeWorkflows({ ...current, runningHubConnection: { ...current.runningHubConnection, baseUrl: " " + ai + "/// " } })).toEqual([rhAi]);
   });
+  it("recovers saved bare-host RunningHub entries while excluding invalid or other-site entries", () => {
+    const bare = workflow("bare-cn", "https://runninghub.cn/");
+    const invalid = workflow("invalid", "https://www.runninghub.cn/not-a-site");
+    const current = { ...state(), computeProvider: "runninghub" as const, runningHubWorkflows: [bare, rhAi, invalid] };
+    const workflows = activeWorkflows(current);
+    expect(workflows).toEqual([bare]);
+    expect(executionWorkflows(current)).toEqual([bare]);
+    expect(activeWorkflows({ ...current, runningHubConnection: { ...current.runningHubConnection, baseUrl: "https://runninghub.cn" } })).toBe(workflows);
+  });
   it("invalidates the filtered list when the dedicated RunningHub record changes", () => {
     const current = { ...state(), computeProvider: "runninghub" as const };
     const before = activeWorkflows(current);

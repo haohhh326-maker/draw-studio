@@ -80,6 +80,8 @@ export type RunningHubAccountStatus = {
   valid: true; currency?: string; apiType?: string;
   remainCoins?: string; remainMoney?: string; currentTaskCounts?: string;
 };
+export type RunningHubPublishedPrompt = { nodeId: string; field: string };
+export type RunningHubWorkflowImportMetadata = { name?: string; publishedPrompt?: RunningHubPublishedPrompt };
 
 /** Keep exact decimal strings from the account API, without coercing missing values to zero. */
 function accountDecimal(value: unknown): string | undefined {
@@ -128,6 +130,38 @@ export function parseRunningHubWorkflowMetadata(value: unknown, expectedId: stri
   }
   return name ? { name } : {};
 }
+
+function publicDetailAccessible(card: Record<string, unknown>): boolean {
+  const access = record(card.publishAccess) ? card.publishAccess : undefined;
+  return access?.granted !== false && access?.encrypted !== true && access?.needPassword !== true;
+}
+
+function publishedWorkflowId(app: Record<string, unknown>, appId: string) {
+  const sourceId = identifier(app.workflowId);
+  if (identifier(app.id) === appId && app.workflowState === 1 && publicDetailAccessible(app)
+    && sourceId && /^[1-9]\d{0,31}$/.test(sourceId)) return sourceId;
+}
+
+/** Read only an unambiguous prompt target explicitly named by the publisher. */
+function publishedPrompt(app: Record<string, unknown>): RunningHubPublishedPrompt | undefined {
+  if (!Array.isArray(app.inputNodes) || (app.webappState !== undefined && app.webappState !== 1)) return;
+  const targets = new Map<string, RunningHubPublishedPrompt>();
+  const positiveLabel = /^(?:提示词|主提示词|正向提示词|(?:(?:main|positive)\s+)?prompt)$/i;
+  const positiveField = /^(?:prompt|positive_prompt|positive_text|user_prompt)$/i;
+  const negative = /negative|负向|反向/i;
+  for (const input of app.inputNodes) {
+    if (!record(input) || typeof input.fieldType !== "string" || !/^(?:STRING|TEXT)$/i.test(input.fieldType)) continue;
+    const nodeId = identifier(input.nodeId), field = input.fieldName;
+    if (!nodeId || !/^\d+(?::\d+)*$/.test(nodeId) || nodeId.length > 128 || typeof field !== "string" || !/^[\w.-]{1,128}$/.test(field)) continue;
+    const labels = [input.description, input.descriptionCn, input.descriptionEn]
+      .filter((item): item is string => typeof item === "string").map(item => item.trim());
+    if (isRunningHubAppCredentialField({ fieldName: field, fieldType: input.fieldType, secret: input.secret === true })
+      || [field, ...labels].some(label => negative.test(label) || isWorkflowCredentialFieldName(label))) continue;
+    if (positiveField.test(field) || labels.some(label => positiveLabel.test(label))) targets.set(`${nodeId}\0${field}`, { nodeId, field });
+  }
+  if (targets.size === 1) return targets.values().next().value;
+}
+
 export function isRunningHubAppCredentialField(field: Pick<RunningHubAppField, "fieldName" | "description" | "fieldType" | "secret">): boolean {
   return field.secret === true || isWorkflowCredentialFieldName(field.fieldName)
     || isWorkflowCredentialFieldName(field.description ?? "")
@@ -143,7 +177,8 @@ export function runningHubAppFromRead(reader: AifisherWorkflowReadResult): Runni
   const nodeInfoList = snapshot.fields.map((field): RunningHubAppField => {
     const raw = rawFields.find(item => String(item.nodeId) === String(field.nodeId) && String(item.fieldName) === String(field.fieldName));
     const value = field.value;
-    if (!(value === null || typeof value === "string" || typeof value === "boolean" || typeof value === "number" && Number.isFinite(value))) throw new Error("AIFISHER 返回的公开字段不是可提交的标量。");
+    if (!(value === null || typeof value === "string" || typeof value === "boolean" || typeof value === "number" && Number.isFinite(value)))
+      throw new Error("AIFISHER 无法读取可提交的公开字段 " + String(field.nodeId) + "." + String(field.fieldName) + "。");
     const secret = reader.credentialTargets?.some(item => item.nodeId === field.nodeId && item.fieldName === field.fieldName) === true;
     const input = record(field.mediaInput) ? field.mediaInput : undefined;
     return {
@@ -345,16 +380,76 @@ export class RunningHubClient extends ComfyUIClient {
   }
 
   async getWorkflow(id: string, signal?: AbortSignal): Promise<ApiWorkflow> {
-    const reader = await readAifisherWorkflow({ environment: "runninghub-workflow", remote: {
-      baseUrl: this.base, remoteId: workflowId(id), apiKey: this.connection.token,
-    } }, signal);
+    const reader = await this.readWorkflowDefinition(id, signal);
     if (!reader.workflow) throw new Error("AIFISHER 未返回可执行的 RunningHub 工作流。");
     return reader.workflow;
   }
 
+  async getPublicWorkflowExport(id: string, signal?: AbortSignal): Promise<Record<string, unknown>> {
+    const reader = await this.readWorkflowDefinition(id, signal, true);
+    const source = reader.workflow ?? reader.editorWorkflow;
+    if (!source) throw new Error("RunningHub 官网未提供可导入的工作流 JSON。");
+    return source;
+  }
+
+  private readWorkflowDefinition(id: string, signal?: AbortSignal, publicExport = false) {
+    return readAifisherWorkflow({ environment: "runninghub-workflow", remote: {
+      baseUrl: this.base, remoteId: workflowId(id), ...(publicExport ? { publicExport: true } : { apiKey: this.connection.token }),
+    } }, signal);
+  }
+
   /** Read only the public published card. Account credentials are never sent. */
   async getWorkflowMetadata(id: string, kind: "workflow" | "app" = "workflow", signal?: AbortSignal): Promise<RunningHubWorkflowMetadata> {
-    const expectedId = workflowId(id), path = kind === "app" ? "/api/webapp/detail" : "/api/workflow/getDetail";
+    const expectedId = workflowId(id);
+    return parseRunningHubWorkflowMetadata(await this.requestPublicDetail(expectedId, kind, signal), expectedId);
+  }
+
+  /** Use a linked app's public input metadata only when both cards verify the relationship. */
+  async getWorkflowImportMetadata(id: string, signal?: AbortSignal): Promise<RunningHubWorkflowImportMetadata> {
+    const sourceId = workflowId(id);
+    const sourceCard = await this.requestPublicDetail(sourceId, "workflow", signal);
+    const source = record(sourceCard.data) ? sourceCard.data : sourceCard;
+    const { name } = parseRunningHubWorkflowMetadata(sourceCard, sourceId);
+    const appId = identifier(source.webappId);
+    if (source.workflowState !== 1 || !publicDetailAccessible(source) || !appId || !/^[1-9]\d{0,31}$/.test(appId)) return { name };
+    try {
+      const timeout = AbortSignal.timeout(4000);
+      const appCard = await this.requestPublicDetail(appId, "app", signal ? AbortSignal.any([signal, timeout]) : timeout);
+      const app = record(appCard.data) ? appCard.data : appCard;
+      const prompt = publishedWorkflowId(app, appId) === sourceId ? publishedPrompt(app) : undefined;
+      return { name, ...(prompt ? { publishedPrompt: prompt } : {}) };
+    } catch {
+      signal?.throwIfAborted();
+      return { name };
+    }
+  }
+
+  /** Resolve the app's official public workflow link before requesting its execution graph. */
+  async getPublishedAppWorkflow(id: string, signal?: AbortSignal): Promise<({ id: string } & RunningHubWorkflowImportMetadata) | undefined> {
+    const appId = workflowId(id);
+    try {
+      const appCard = await this.requestPublicDetail(appId, "app", signal);
+      const app = record(appCard.data) ? appCard.data : appCard;
+      const sourceId = publishedWorkflowId(app, appId);
+      if (!sourceId) return;
+
+      const sourceCard = await this.requestPublicDetail(sourceId, "workflow", signal);
+      const source = record(sourceCard.data) ? sourceCard.data : sourceCard;
+      if (identifier(source.id) !== sourceId || source.workflowState !== 1 || !publicDetailAccessible(source)) return;
+      const linkedAppId = identifier(source.webappId);
+      if (linkedAppId && /^[1-9]\d{0,31}$/.test(linkedAppId) && linkedAppId !== appId) return;
+      const { name } = parseRunningHubWorkflowMetadata(sourceCard, sourceId);
+      const prompt = publishedPrompt(app);
+      return { id: sourceId, name, ...(prompt ? { publishedPrompt: prompt } : {}) };
+    } catch (error) {
+      if (error instanceof ApiError && [401, 403, 404, 410].includes(error.status)) return;
+      throw error;
+    }
+  }
+
+  private async requestPublicDetail(expectedId: string, kind: "workflow" | "app", signal?: AbortSignal) {
+    signal?.throwIfAborted();
+    const path = kind === "app" ? "/api/webapp/detail" : "/api/workflow/getDetail";
     const target = browserApi(path, this.base);
     const fetcher = isTauri() ? (await import("@tauri-apps/plugin-http")).fetch : fetch;
     const response = await fetcher(target.url, {
@@ -364,12 +459,12 @@ export class RunningHubClient extends ComfyUIClient {
     });
     if (!response.ok) throw new ApiError("RunningHub 暂时无法读取工作流名称和封面。", response.status, "");
     const text = await response.text();
+    signal?.throwIfAborted();
     if (text.length > 4 * 1024 * 1024) throw new Error("RunningHub 工作流详情超过大小限制。");
     let result: unknown;
     try { result = JSON.parse(text); } catch { throw new Error("RunningHub 工作流详情不是有效 JSON。"); }
     if (!record(result)) throw new Error("RunningHub 工作流详情格式无效。");
-    this.success(result, "读取名称和封面");
-    return parseRunningHubWorkflowMetadata(result, expectedId);
+    return this.success(result, "读取名称和封面");
   }
 
   async getAiApp(id: string, signal?: AbortSignal, _readPresentation = false): Promise<RunningHubAiApp> {

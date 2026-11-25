@@ -33,7 +33,7 @@ import {
 import { useStore, activeCanvas, workflowCredentialValues } from "../stores/store";
 import { detectWorkflowCredentials, missingWorkflowCredentials } from "../workflow/credentials";
 import { activeWorkflows, executionWorkflows, activeConnection, isRunningHubProvider, nodeComputeState } from "../compute/providers";
-import { resolvePrompt } from "../semantic/prompt";
+import { resolvePrompt, workflowUsesMainPrompt } from "../semantic/prompt";
 import { getPromptMentionCandidates } from "../semantic/mentions";
 import { resolveInputs, workflowInputRoleLabel } from "../semantic/resolver";
 import { findWorkflow } from "../workflow/catalog";
@@ -131,23 +131,27 @@ export function GenerationPanel() {
     }) };
     return loraModels.info ? withServerLoraChoices(source, loraModels.info) : source;
   }, [branch, hasLora, loraModels.info, computeProvider]);
-  const rawSurface = useMemo(() => w ? generationParameterSurface(w, w.runninghub ? node?.data.generation?.params : undefined) : { basic: [], advanced: [], other: [] }, [w, node?.data.generation?.params]);
+  const rawSurface = useMemo(() => w ? generationParameterSurface(w, w.runninghub ? node?.data.generation?.params : undefined) : { basic: [], advanced: [], other: [], text: [] }, [w, node?.data.generation?.params]);
+  const showMainPrompt = workflowUsesMainPrompt(w);
   const mentionCandidates = useMemo(() => node ? getPromptMentionCandidates(canvas, node.id, assets) : [],
     [canvas.nodes, canvas.edges, node?.id, assets]);
   const optimization = usePromptOptimization({ canvas, nodeId: node?.id, workflow: branch, assets,
-    disabled: busyPhases.includes(task.status), promptField: "generation" });
+    disabled: !showMainPrompt || busyPhases.includes(task.status), promptField: "generation" });
   if (!node?.data.generation) return null;
   const g = node.data.generation,
     busy = busyPhases.includes(task.status);
   const parameterSurface = { basic: rawSurface.basic.filter(p => !p.secret), advanced: rawSurface.advanced.filter(p => !p.secret), other: rawSurface.other.filter(p => !p.secret) };
+  const importedComfy = w?.importReader?.environment === "comfyui" && !w.runninghub && !w.muse;
   const inlineSourceParameters = w?.runninghub?.parameterSchemaVersion === 2;
   const stepParameters = inlineSourceParameters ? [] : parameterSurface.basic.filter(parameter => parameterRole(parameter, w) === "steps");
   const hasCoreSettings = parameterSurface.advanced.length > 0 || stepParameters.length > 0;
-  const hasBoundRatio = !!w?.runninghub && parameterSurface.basic.some(parameter => parameterRole(parameter, w) === "ratio");
-  const ratioControls = w && !hasBoundRatio && w.runninghub?.parameterSchemaVersion !== 2 ? dimensionRatioControls(w.runninghub ? { ...w, parameters: parameterSurface.basic } : w) : [];
+  const hasBoundRatio = (!!w?.runninghub || importedComfy) && parameterSurface.basic.some(parameter => parameterRole(parameter, w) === "ratio");
+  const ratioControls = w && !hasBoundRatio && w.runninghub?.parameterSchemaVersion !== 2
+    ? dimensionRatioControls(w.runninghub || importedComfy ? { ...w, parameters: parameterSurface.basic } : w) : [];
   const ratioKeys = new Set(ratioControls.flatMap(control => [control.width.key, control.height.key]));
   const commonParameters = parameterSurface.basic.filter(parameter => inlineSourceParameters || (parameterRole(parameter, w) !== "steps" && (!!w?.runninghub || !ratioKeys.has(parameter.key))));
-  const detailedParameters = parameterSurface.other;
+  const textParameters = rawSurface.text.filter(parameter => !parameter.secret);
+  const detailedParameters = [...textParameters.map(parameter => ({ ...parameter, group: "文本输入" })), ...parameterSurface.other];
   const hasSettings = hasCoreSettings || detailedParameters.length > 0;
   const activeSettingsTab = hasCoreSettings ? settingsTab : "nodes";
   const search = parameterSearch.trim().toLocaleLowerCase();
@@ -440,7 +444,7 @@ export function GenerationPanel() {
           </div>
         )}
           <div className="row generation-actions">
-            <OptimizationControls controller={optimization} />
+            {showMainPrompt && <OptimizationControls controller={optimization} />}
             <IconButton
               title="选择当前节点算力"
               className="generation-compute-trigger"
@@ -465,8 +469,8 @@ export function GenerationPanel() {
             </IconButton>
           </div>
         </header>
-        <OptimizationFeedback controller={optimization} />
-        {supportsMentions ? <PromptEditor value={g.prompt} candidates={mentionCandidates} disabled={busy}
+        {showMainPrompt && <OptimizationFeedback controller={optimization} />}
+        {showMainPrompt && (supportsMentions ? <PromptEditor value={g.prompt} candidates={mentionCandidates} disabled={busy}
           placeholder="" onChange={prompt => update({ prompt })} onSubmit={() => { void generate(canvas.id, node.id); }} /> : <textarea
           className="prompt"
           aria-label="提示词"
@@ -477,10 +481,16 @@ export function GenerationPanel() {
             if ((e.ctrlKey || e.metaKey) && e.key === "Enter")
               void generate(canvas.id, node.id);
           }}
-        />}
-        {supportsMentions && resolved.missingMentions.length > 0 && <p className="prompt-mention-warning" role="status">
+        />)}
+        {showMainPrompt && supportsMentions && resolved.missingMentions.length > 0 && <p className="prompt-mention-warning" role="status">
           引用素材已断开连接：{resolved.missingMentions.map(item => item.label).join("、")}。请重新连接素材或删除对应标签。
         </p>}
+        {!showMainPrompt && textParameters.length > 0 && <button type="button" className="workflow-text-input-trigger"
+          aria-haspopup="dialog" aria-expanded={settingsOpen && activeSettingsTab === "nodes"} onClick={() => {
+            setParameterSearch("");
+            setSettingsTab("nodes");
+            setSettingsOpen(true);
+          }}>编辑文本输入</button>}
         <footer className="generation-footer">
           <div className="workflow-control">
             <button
@@ -584,7 +594,7 @@ export function GenerationPanel() {
               {activeSettingsTab === "nodes" && <div className="workflow-node-settings" role="region" aria-label={w?.runninghub ? "可调参数" : "完整节点参数"}>
                 <input className="node-parameter-search" type="search" aria-label={w?.runninghub ? "搜索可调参数" : "搜索节点参数"} placeholder={w?.runninghub ? "搜索可调参数" : "搜索参数或节点"} value={parameterSearch} onChange={event => setParameterSearch(event.target.value)} />
                 <small role="status">{search ? `找到 ${nodeParameters.length} 项参数` : w?.runninghub ? `共 ${detailedParameters.length} 项可调参数` : `共 ${detailedParameters.length} 项参数，按节点分组`}</small>
-                {nodeParameterGroups.map(group => <details className="parameter-group node-parameter-group" key={group} open={!!search}>
+                {nodeParameterGroups.map(group => <details className="parameter-group node-parameter-group" key={group} open={!!search || group === "文本输入"}>
                   <summary>{group}<span>{nodeParameters.filter(parameter => (parameter.group ?? "其他参数") === group).length}</span></summary>
                   <div>{nodeParameters.filter(parameter => (parameter.group ?? "其他参数") === group).map(parameter => <ParameterInput key={parameter.key} p={parameter} workflow={w} compact
                     value={g.params[parameter.key] ?? parameter.default} disabled={busy}

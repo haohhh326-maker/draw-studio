@@ -14,14 +14,13 @@ import type { RunningHubAiApp } from "./client";
 import { runningHubImportCredentialIdentities } from "./import-analysis";
 import { applyRunningHubWorkflowMetadata } from "./workflow-metadata";
 import { attachRunningHubExecutionContract } from "./execution-contract";
-import { reviewRunningHubImportBindings } from "./import-review";
+import { reviewRunningHubImportBindings, runningHubFieldKey as fieldKey } from "./import-review";
 import { analyzeRunningHubUpstream, requireRunningHubReader, type RunningHubReaderResult } from "./upstream-reader";
 import { RunningHubWorkflowLibrary } from "./RunningHubWorkflowLibrary";
 import "./runninghub-workflows.css";
 
 const outputLabels: Record<MediaKind, string> = { image: "图像", video: "视频", audio: "音频", text: "文本", file: "文件" };
 const message = (reason: unknown) => reason instanceof Error ? reason.message : String(reason);
-const fieldKey = (nodeId: string, field: string) => JSON.stringify([nodeId, field]);
 const nativeWorkflowGuidance = "此链接是 RunningHub ComfyUI 工作流，请到「RunningHub 工作流」添加；这里仅添加 AI 应用。";
 
 /** A bare ID is always an AI app here; never probe a workflow endpoint. */
@@ -40,9 +39,12 @@ type LoadedDraft = { graph: ApiWorkflow; reader: RunningHubReaderResult; id: str
 /** Ordinary binding lists contain recognized inputs and reviewed custom targets. */
 export function runningHubBindingFieldChoices(graph: ApiWorkflow, analysis: ImportAnalysis, promptKey: string, media: ImportMediaBinding[], credentials: Set<string>, custom = false) {
   const strings = analysis.fields.filter(field => typeof field.value === "string" && !credentials.has(fieldKey(field.nodeId, field.field)));
-  const prompts = new Set(analysis.prompts.map(field => field.nodeId + "." + field.field));
+  const prompts = new Set(analysis.prompts.map(field => fieldKey(field.nodeId, field.field)));
   const inputs = new Set([...analysis.inputs, ...media].map(field => fieldKey(field.nodeId, field.field)));
-  const promptFields = strings.filter(field => custom || prompts.has(field.nodeId + "." + field.field) || field.nodeId + "." + field.field === promptKey);
+  const promptFields = strings.filter(field => {
+    const key = fieldKey(field.nodeId, field.field);
+    return custom || prompts.has(key) || key === promptKey;
+  });
   const nullableMedia = [...analysis.inputs, ...media].filter(field => graph[field.nodeId]?.inputs[field.field] === null
     && !credentials.has(fieldKey(field.nodeId, field.field))).map(field => ({ nodeId: field.nodeId, field: field.field, label: field.label || field.nodeId + "." + field.field, value: null }));
   const mediaFields = [...new Map<string, { nodeId: string; field: string; label: string; value: unknown }>([...strings.filter(field => custom || inputs.has(fieldKey(field.nodeId, field.field))), ...nullableMedia]
@@ -148,6 +150,8 @@ function RunningHubAiAppEditor({ initialId, refreshOnOpen = false, onWorkflowAdd
   const analysis = useMemo(() => graph && reader ? analyzeRunningHubUpstream(reader, loadedApp?.outputKind) : undefined, [graph, reader, loadedApp?.outputKind]);
   const credentialIdentities = useMemo(() => graph ? runningHubImportCredentialIdentities(graph, loadedApp) : new Set<string>(), [graph, loadedApp]);
   const { promptFields, mediaFields } = graph && analysis ? runningHubBindingFieldChoices(graph, analysis, promptKey, media, credentialIdentities, customBindings) : { promptFields: [], mediaFields: [] };
+  const nextMediaField = mediaFields.find(field => fieldKey(field.nodeId, field.field) !== promptKey
+    && !media.some(input => input.nodeId === field.nodeId && input.field === field.field));
   const outputNodes = graph ? Object.entries(graph).filter(([id]) => loadedApp ? id === runningHubAppOutputNode : customBindings || outputs.some(output => output.nodeId === id) || analysis?.outputs.some(output => output.nodeId === id)) : [];
   const unknownOutputs = outputs.filter(output => output.kind === "file" && output.field === "*");
   const activeSite = site.baseUrl === "https://www.runninghub.ai" ? "ai" : "cn";
@@ -286,8 +290,20 @@ function RunningHubAiAppEditor({ initialId, refreshOnOpen = false, onWorkflowAdd
           </section>}
           {graph && <details className="rh-workflow-binding-details" open={bindingOpen} onToggle={event => setBindingOpen(event.currentTarget.open)}><summary>{bindingOpen ? "输入、输出与参数设置" : "调整输入、输出与参数"}</summary><div className="rh-workflow-bindings">
             <p className="rh-workflow-muted">{loadedApp ? "已识别的素材按应用公开的类型和必填要求保留，可调整其他画布输入和输出。" : "保留已识别的素材输入，选择主提示词和实际输出。"}</p>
-            <label>画布主提示词<select aria-label="RunningHub 主提示词绑定" value={promptKey} disabled={!!busy} onChange={event => { setPromptKey(event.target.value); setNotice(""); }}><option value="">不绑定主提示词</option>{promptFields.map(field => <option key={fieldKey(field.nodeId, field.field)} value={field.nodeId + "." + field.field}>{field.label}</option>)}</select></label>
-            <div className="rh-workflow-section-heading"><h4>素材输入</h4><button type="button" disabled={!!busy || !mediaFields.some(field => !media.some(input => input.nodeId === field.nodeId && input.field === field.field) && field.nodeId + "." + field.field !== promptKey)} onClick={() => { const next = mediaFields.find(field => !media.some(input => input.nodeId === field.nodeId && input.field === field.field) && field.nodeId + "." + field.field !== promptKey); if (next) { const declared = analysis?.inputs.find(input => input.nodeId === next.nodeId && input.field === next.field); setMedia([...media, { nodeId: next.nodeId, field: next.field, kind: declared?.kind ?? "image", required: declared?.required !== false, label: next.label }]); } }}><Plus size={14} />添加输入</button></div>
+            <label>画布主提示词<select aria-label="RunningHub 主提示词绑定" value={promptKey} disabled={!!busy} onChange={event => { setPromptKey(event.target.value); setNotice(""); }}>
+              <option value="">不绑定主提示词</option>
+              {promptFields.map(field => {
+                const key = fieldKey(field.nodeId, field.field);
+                const label = field.nodeId.includes(".") || field.field.includes(".") ? field.label + " · " + field.nodeId + " / " + field.field : field.label;
+                return <option key={key} value={key}>{label}</option>;
+              })}
+            </select></label>
+            <div className="rh-workflow-section-heading"><h4>素材输入</h4><button type="button" disabled={!!busy || !nextMediaField} onClick={() => {
+              if (!nextMediaField) return;
+              const { nodeId, field, label } = nextMediaField;
+              const declared = analysis?.inputs.find(input => input.nodeId === nodeId && input.field === field);
+              setMedia([...media, { nodeId, field, kind: declared?.kind ?? "image", required: declared?.required !== false, label }]);
+            }}><Plus size={14} />添加输入</button></div>
             {!media.length && <p className="rh-workflow-muted">无素材输入</p>}
             {media.map((input, index) => {
               const declared = !!analysis?.inputs.some(field => field.nodeId === input.nodeId && field.field === input.field);

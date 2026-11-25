@@ -9,6 +9,8 @@ import type { AifisherWorkflowReadResult } from "../src/workflow/aifisher-reader
 import { isLegacyImportFamily, resolveWorkflowImportFamily } from "../src/workflow/import-category";
 import { workflowModelFolderStem } from "../src/workflow/import-folder-name";
 import { readImportEnvironmentReport } from "../src/workflow/import-environment-diagnostics";
+import { readPublishedWorkflowPrompt } from "../src/workflow/automatic-prompt-binding";
+import { serializedWorkflowLibraryRoot } from "./workflow-library-queue";
 
 type JsonObject = Record<string, unknown>;
 function retainSavedPresentation(target: JsonObject, saved: JsonObject) {
@@ -40,16 +42,6 @@ const PACKAGE_FILES = ["source.json", "execution.api.json", "workflow.config.jso
 const IMPORTER = "clearframe-canvas";
 type ImportMetadata = { schemaVersion: 1; importer: string; workflowId: string; sourceSha256: string; originalFilename: string; importedAt: number; updatedAt: number };
 const hash = (text: string) => createHash("sha256").update(text).digest("hex");
-const rootQueues = new Map<string, Promise<unknown>>();
-async function serializedRoot<T>(root: string, action: () => Promise<T>): Promise<T> {
-  const queueKey = process.platform === "win32" ? root.toLowerCase() : root;
-  const previous = rootQueues.get(queueKey) ?? Promise.resolve();
-  const current = previous.catch(() => {}).then(action);
-  rootQueues.set(queueKey, current);
-  try { return await current; } finally { if (rootQueues.get(queueKey) === current) rootQueues.delete(queueKey); }
-}
-/** Shared by import, migration and directory deletion after resolving the library root. */
-export const serializedWorkflowLibraryRoot = serializedRoot;
 
 function object(value: unknown, label: string): JsonObject {
   if (!value || typeof value !== "object" || Array.isArray(value)) throw new WorkflowImportError(label + " 必须是 JSON 对象。");
@@ -238,14 +230,14 @@ export async function writeWorkflowLibraryImport(requestedRoot: string, request:
   try { root = await realpath(requestedRoot); if (!(await lstat(root)).isDirectory()) throw new Error(); }
   catch { throw new WorkflowImportError("无法写入配置的本地工作流库目录。", 500); }
   // Serialize mutations to each root so two simultaneous imports cannot race an update.
-  return serializedRoot(root, () => writePackage(root, request));
+  return serializedWorkflowLibraryRoot(root, () => writePackage(root, request));
 }
 
 /** Read only the immutable source in a verified managed import package. */
 export async function readWorkflowLibraryImportSource(requestedRoot: string, workflowId: string): Promise<WorkflowImportSource> {
   if (typeof workflowId !== "string" || !ID.test(workflowId)) throw new WorkflowImportError("自定义工作流 ID 格式无效。");
   const root = await configuredRoot(requestedRoot);
-  return serializedRoot(root, async () => {
+  return serializedWorkflowLibraryRoot(root, async () => {
     const folder = await findManagedWorkflowImportFolder(root, workflowId);
     const metadata = await existingPackage(root, folder, true);
     const source = JSON.parse(await safeFile(root, folder, "source.json", MAX_GRAPH)) as unknown;
@@ -264,7 +256,7 @@ export async function resolveWorkflowLibraryImport(requestedRoot: string, rawReq
   if (request.objectInfo !== undefined) object(request.objectInfo, "ComfyUI 节点定义");
   let root: string;
   try { root = await realpath(requestedRoot); if (!(await lstat(root)).isDirectory()) throw new Error(); } catch { throw new WorkflowImportError("无法读取配置的工作流库。", 500); }
-  return serializedRoot(root, async () => {
+  return serializedWorkflowLibraryRoot(root, async () => {
   const folder = await findManagedWorkflowImportFolder(root, String(request.workflowId));
   const metadata = await existingPackage(root, folder, true);
   const config = object(JSON.parse(await safeFile(root, folder, "workflow.config.json", MAX_CONFIG)), "工作流配置");
@@ -272,7 +264,8 @@ export async function resolveWorkflowLibraryImport(requestedRoot: string, rawReq
   const source = JSON.parse(await safeFile(root, folder, "source.json", MAX_GRAPH)) as unknown;
   if (hash(JSON.stringify(source)) !== metadata.sourceSha256) throw new WorkflowImportError("原始文件已发生变化，请重新添加。", 409);
   const prepared = await prepareWorkflowImport(source, metadata.originalFilename, request.objectInfo as JsonObject | undefined,
-    async input => await readAIFisherWorkflow(input) as unknown as AifisherWorkflowReadResult);
+    async input => await readAIFisherWorkflow(input) as unknown as AifisherWorkflowReadResult, undefined,
+    readPublishedWorkflowPrompt(config.importPublishedPrompt));
   prepared.config.id = metadata.workflowId;
   retainSavedPresentation(prepared.config, config);
   return writePackage(root, { filename: metadata.originalFilename, source, graph: prepared.graph, config: prepared.config,
@@ -287,6 +280,9 @@ async function writePackage(root: string, rawRequest: WorkflowImportRequest): Pr
   if (request.reuseExisting !== undefined && typeof request.reuseExisting !== "boolean") throw new WorkflowImportError("复用选项必须是布尔值。");
   const source = object(request.source, "原始工作流");
   let config = structuredClone(object(request.config, "工作流配置"));
+  const publishedPrompt = readPublishedWorkflowPrompt(config.importPublishedPrompt);
+  if (publishedPrompt) config.importPublishedPrompt = publishedPrompt;
+  else delete config.importPublishedPrompt;
   const suffix = typeof config.id === "string" ? ID.exec(config.id)?.[1] : undefined;
   if (!suffix) throw new WorkflowImportError("自定义工作流 ID 格式无效。");
   let requirements = object(request.requirements, "模型需求");
@@ -310,6 +306,7 @@ async function writePackage(root: string, rawRequest: WorkflowImportRequest): Pr
       const environmentReport = readImportEnvironmentReport(importState(config).environmentReport);
       if (environmentReport) verified.importState.environmentReport = environmentReport;
       if (workflowReaderProvenance(config)) verified.config.importReader = workflowReaderProvenance(config);
+      if (publishedPrompt) verified.config.importPublishedPrompt = publishedPrompt;
       retainSavedPresentation(verified.config, config);
       config = verified.config;
       requirements = verified.requirements;
@@ -380,7 +377,9 @@ async function writePackage(root: string, rawRequest: WorkflowImportRequest): Pr
       // A stale recheck/import cannot replace a package that has become ready.
       if (pending && importState(savedConfig!).status !== "pending" && old.sourceSha256 === sourceSha256) await reusePackage(candidate, old.workflowId);
       if (request.reuseExisting === true && old.sourceSha256 === sourceSha256) {
-        if (!pending && importState(savedConfig!).status === "pending") {
+        // Let the client revalidate a saved publisher locator before upgrading.
+        if (!pending && importState(savedConfig!).status === "pending"
+          && (publishedPrompt || !readPublishedWorkflowPrompt(savedConfig!.importPublishedPrompt))) {
           await existingPackage(root, candidate, true);
           automaticUpgrade = true;
           retainSavedPresentation(config, savedConfig!);

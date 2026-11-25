@@ -1,7 +1,8 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import type { ApiWorkflow } from "../src/types";
+import type { ApiWorkflow, CanvasNode } from "../src/types";
 import { readRunningHubWorkflowFixture } from "./runninghub-test-reader";
 import { readRunningHubRemoteWorkflow, prepareRunningHubRemoteWorkflow, remoteWorkflowPromptChoices } from "../src/runninghub/remote-workflow";
+import { buildWorkflow } from "../src/workflow-adapter/adapter";
 
 const site = "https://www.runninghub.cn", id = "2115791287499706370";
 const fixture = (): ApiWorkflow => ({
@@ -63,6 +64,27 @@ describe("remote RunningHub ComfyUI reference imports", () => {
     await expect(readRunningHubRemoteWorkflow(client, id, site, controller.signal)).rejects.toMatchObject({ name: "AbortError" });
   });
 
+  it("writes the main prompt to the positive conditioning branch when the negative text is listed first", async () => {
+    const source: ApiWorkflow = {
+      "1": { class_type: "CLIPTextEncode", inputs: { text: "authored negative conditioning" } },
+      "2": { class_type: "PrimitiveString", inputs: { value: "authored positive example" } },
+      "3": { class_type: "CLIPTextEncode", inputs: { text: ["2", 0] } },
+      "4": { class_type: "KSampler", inputs: { positive: ["3", 0], negative: ["1", 0], seed: 123 } },
+      "5": { class_type: "SaveImage", inputs: { images: ["4", 0], filename_prefix: "original-output" } },
+    };
+    const original = structuredClone(source);
+    await readRunningHubWorkflowFixture(source);
+    const client = { getWorkflow: vi.fn(async () => source), getWorkflowMetadata: vi.fn(async () => ({})) };
+    const draft = await readRunningHubRemoteWorkflow(client, id, site);
+    expect(draft.promptKey).toBe(JSON.stringify(["2", "value"]));
+    const workflow = await prepareRunningHubRemoteWorkflow(draft);
+    const node = { data: { generation: { workflowId: workflow.id, prompt: "new main prompt", negativePrompt: "", params: {}, taskId: null } } } as CanvasNode;
+    const request = buildWorkflow(workflow, node, [], {}).workflow;
+    expect(request).toEqual({ ...original, "2": { class_type: "PrimitiveString", inputs: { value: "new main prompt" } } });
+    expect(workflow.template).toEqual(original);
+    expect(source).toEqual(original);
+  });
+
   it("clears secondary positive/negative authored prompt defaults without mutating source text or model defaults", async () => {
     const source = fixture();
     source["2"].inputs.negative_prompt = "author negative example";
@@ -78,7 +100,36 @@ describe("remote RunningHub ComfyUI reference imports", () => {
     expect(parameterFor("3", "filename_prefix")).toBeUndefined();
     expect(workflow.template).toEqual(before); expect(source).toEqual(before);
     const choices = remoteWorkflowPromptChoices(draft.reader);
-    expect(choices.map(field => field.nodeId + "." + field.field)).toContain(draft.promptKey);
+    expect(choices.map(field => JSON.stringify([field.nodeId, field.field]))).toContain(draft.promptKey);
     expect(choices.some(field => field.field === "model_name" || field.field === "filename_prefix")).toBe(false);
+  });
+
+  it("selects and reopens either published text port when their legacy keys are identical", async () => {
+    const source: ApiWorkflow = {
+      "镜头": { class_type: "PromptText", inputs: { "配置.prompt": "甲" } },
+      "镜头.配置": { class_type: "PromptText", inputs: { prompt: "乙" } },
+      generate: { class_type: "ImageGenerator", inputs: { scene: ["镜头", 0], prompt: ["镜头.配置", 0] } },
+      save: { class_type: "SaveImage", inputs: { images: ["generate", 0] } },
+    };
+    const original = structuredClone(source);
+    await readRunningHubWorkflowFixture(source);
+    const client = { getWorkflow: vi.fn(async () => source), getWorkflowMetadata: vi.fn(async () => ({})) };
+    const draft = await readRunningHubRemoteWorkflow(client, id, site);
+    const choices = remoteWorkflowPromptChoices(draft.reader);
+    const pairs = [["镜头", "配置.prompt"], ["镜头.配置", "prompt"]] as const;
+    expect(choices.map(field => [field.nodeId, field.field])).toEqual(expect.arrayContaining(pairs));
+    await expect(prepareRunningHubRemoteWorkflow({ ...draft, promptKey: "镜头.配置.prompt" })).rejects.toThrow("唯一文本参数");
+    for (const [nodeId, field] of pairs) {
+      const promptKey = JSON.stringify([nodeId, field]);
+      const workflow = await prepareRunningHubRemoteWorkflow({ ...draft, promptKey });
+      expect(workflow.mapping.filter(item => item.semantic === "prompt")).toEqual([{ semantic: "prompt", nodeId, field }]);
+      expect((await readRunningHubRemoteWorkflow(client, id, site, undefined, workflow)).promptKey).toBe(promptKey);
+      const canvas = { data: { generation: { workflowId: workflow.id, prompt: "画布提示词", negativePrompt: "", params: {}, taskId: null } } } as CanvasNode;
+      const expected = structuredClone(original);
+      expected[nodeId].inputs[field] = "画布提示词";
+      expect(buildWorkflow(workflow, canvas, [], {}).workflow).toEqual(expected);
+      expect(workflow.template).toEqual(original);
+    }
+    expect(source).toEqual(original);
   });
 });

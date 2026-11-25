@@ -31,9 +31,9 @@ export function validateDefinition(w: WorkflowDefinition) {
       (!Number.isInteger(m.index) || m.index < 0 || !plural.has(m.semantic))
     )
       throw new Error("素材索引必须是数组语义中的非负整数。");
-    const target = m.nodeId + "." + m.field;
+    const target = JSON.stringify([m.nodeId, m.field]);
     if (targets.has(target))
-      throw new Error("同一字段不能绑定多个语义输入：" + target);
+      throw new Error("同一字段不能绑定多个语义输入：" + m.nodeId + "." + m.field);
     targets.add(target);
     const n = w.template[m.nodeId];
     if (!n || !(m.field in n.inputs))
@@ -218,8 +218,10 @@ export function buildWorkflow(
     const assigned = new Set<string>();
     for (const [index, output] of outputs.entries()) {
       const target = output.prefix ?? (!w.importReader && typeof workflow[output.nodeId]?.inputs.filename_prefix === "string" ? { nodeId: output.nodeId, field: "filename_prefix" } : undefined);
-      if (!target || assigned.has(target.nodeId + "." + target.field)) continue;
-      assigned.add(target.nodeId + "." + target.field);
+      if (!target) continue;
+      const key = JSON.stringify([target.nodeId, target.field]);
+      if (assigned.has(key)) continue;
+      assigned.add(key);
       workflow[target.nodeId].inputs[target.field] = index === 0 ? outputPrefix : outputPrefix + "-output-" + index;
     }
   }

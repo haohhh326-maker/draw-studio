@@ -144,6 +144,16 @@ describe("RunningHub selected catalog downgrade protection", () => {
 });
 
 describe("RunningHub workflow presentation metadata", () => {
+  it("keeps the persisted user name when a stale draft supplies a platform title", () => {
+    const stored = renameRunningHubWorkflow(workflow(), "我的本地名称");
+    const draft = applyRunningHubWorkflowMetadata(workflow(), { name: "官网更新名称" });
+    const merged = preserveRunningHubWorkflowMetadata(draft, stored);
+    expect(merged).toMatchObject({ name: stored.name,
+      runninghub: { nameSource: "custom", platformName: "官网更新名称" } });
+    const explicit = renameRunningHubWorkflow(draft, "另一个本地名称");
+    expect(preserveRunningHubWorkflowMetadata(explicit, stored).name).toBe(explicit.name);
+  });
+
   it("fills a generic imported name and cover without touching graph, bindings or parameters", () => {
     const source = workflow(), snapshot = structuredClone(source);
     const result = applyRunningHubWorkflowMetadata(source, { name: "  MiniMax H3 完整工作流  ", coverUrl: cover });

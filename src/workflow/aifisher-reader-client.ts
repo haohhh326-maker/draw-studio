@@ -7,7 +7,10 @@ export type AifisherWorkflowReadRequest = {
   source?: unknown;
   objectInfo?: Record<string, unknown>;
   remoteId?: string;
-  remote?: { baseUrl: string; remoteId: string; apiKey: string; protocol?: "legacy-webapp-v1" | "ai-app-v2" };
+  remote?: { baseUrl: string; remoteId: string } & (
+    { apiKey: string; protocol?: "legacy-webapp-v1" | "ai-app-v2"; publicExport?: never } |
+    { publicExport: true; apiKey?: never; protocol?: never }
+  );
 };
 export type AifisherBindingCandidate = {
   id: string; nodeId: string; classType: string; nodeTitle: string; fieldName: string;
@@ -55,6 +58,7 @@ export type AifisherWorkflowReadResult = {
   upstream: { repository: string; revision: string };
   format: string;
   workflow: ApiWorkflow | null;
+  editorWorkflow?: Record<string, unknown>;
   analysis: {
     format: string; compileStatus: string; nodeCount: number; linkCount: number;
     candidateBindings: AifisherBindingCandidate[]; candidateOutputs: AifisherOutputCandidate[];
@@ -98,7 +102,9 @@ export async function readAifisherWorkflow(request: AifisherWorkflowReadRequest,
   if (result.environment !== request.environment || result.upstream?.revision !== "bdcf3bec054594fcab591952a8c5acef858d6de4"
     || !result.analysis || !Array.isArray(result.bindingCandidates) || !result.outputEvidence)
     throw new Error("本机服务未返回匹配的 AIFISHER 源码读取结果。");
-  if (request.environment !== "comfyui" && (!Array.isArray(result.parameterBindings) || !Array.isArray(result.parameterBindingDto?.bindings)))
+  const publicEditorFallback = request.remote?.publicExport === true && result.workflow === null
+    && typeof result.format === "string" && result.format.startsWith("comfy-ui-") && Array.isArray(result.editorWorkflow?.nodes);
+  if (request.environment !== "comfyui" && !publicEditorFallback && (!Array.isArray(result.parameterBindings) || !Array.isArray(result.parameterBindingDto?.bindings)))
     throw new Error("本机服务未返回完整的 AIFISHER 参数绑定和控件配置。");
   if (result.workflow) attachAifisherReadResult(result.workflow, result);
   return result;

@@ -1,13 +1,18 @@
 import type { Canvas, TextInput, WorkflowDefinition } from "../types";
 import { resolvePromptMentions } from "./mentions";
 
+export function workflowUsesMainPrompt(workflow?: WorkflowDefinition): boolean {
+  return workflow?.importReader?.environment !== "comfyui" || workflow.mapping.some(mapping => mapping.semantic === "prompt");
+}
+
 export function resolvePrompt(
   canvas: Canvas,
   nodeId: string,
   localPrompt: string,
   workflow?: WorkflowDefinition,
 ) {
-  const local = resolvePromptMentions(localPrompt, canvas, nodeId);
+  const usesMainPrompt = workflowUsesMainPrompt(workflow);
+  const local = resolvePromptMentions(usesMainPrompt ? localPrompt : "", canvas, nodeId);
   const texts: TextInput[] = canvas.edges
     .filter((edge) => edge.target === nodeId)
     .sort((a, b) => (a.data?.order ?? 0) - (b.data?.order ?? 0))
@@ -31,8 +36,7 @@ export function resolvePrompt(
     slotParams,
     extraSlotTexts: slots.length > 0 && texts.length > slots.length,
     missingMentions: local.missingMentions,
-    prompt: [...(slots.length ? [] : texts.map((input) => input.text.trim())), local.text.trim()]
-      .filter(Boolean)
-      .join("\n\n"),
+    prompt: usesMainPrompt ? [...(slots.length ? [] : texts.map((input) => input.text.trim())), local.text.trim()]
+      .filter(Boolean).join("\n\n") : "",
   };
 }

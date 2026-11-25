@@ -1,25 +1,28 @@
 import { workflowImportId } from "./import-client";
 import { pendingWorkflowPackage, type WorkflowImportState } from "./import-pending";
-import { readAifisherWorkflow, type AifisherWorkflowReadRequest, type AifisherWorkflowReadResult } from "./aifisher-reader-client";
+import { attachAifisherReadResult, readAifisherWorkflow, type AifisherWorkflowReadRequest, type AifisherWorkflowReadResult } from "./aifisher-reader-client";
 import { aifisherReaderProvenance, buildAifisherImportPackage } from "./aifisher-import-adapter";
 import { buildImportEnvironmentDiagnostics } from "./import-environment-diagnostics";
+import { readPublishedWorkflowPrompt, type PublishedWorkflowPrompt } from "./automatic-prompt-binding";
 
 export type PreparedWorkflowImport = Awaited<ReturnType<typeof prepareWorkflowImport>>;
 
 /** Both entry points build the same package from exactly one source file. */
 export async function prepareWorkflowImport(source: unknown, filename: string, info?: Record<string, unknown>,
   reader: (request: AifisherWorkflowReadRequest, signal?: AbortSignal) => Promise<AifisherWorkflowReadResult> = readAifisherWorkflow,
-  signal?: AbortSignal) {
+  signal?: AbortSignal, publishedPrompt?: PublishedWorkflowPrompt) {
   signal?.throwIfAborted();
   const name = filename.replace(/\.json$/i, "").replace(/(?:[_. -]api)$/i, "").trim().slice(0, 120) || "导入工作流";
   const id = await workflowImportId(source);
+  const promptHint = readPublishedWorkflowPrompt(publishedPrompt);
   let read: AifisherWorkflowReadResult | undefined;
   try {
   signal?.throwIfAborted();
   read = await reader({ environment: "comfyui", source, ...(info ? { objectInfo: info } : {}) }, signal);
   signal?.throwIfAborted();
   const format = read.format === "comfy-api" ? "api" as const : "editor" as const;
-  const built = buildAifisherImportPackage(read, id, name);
+  const built = buildAifisherImportPackage(read, id, name, promptHint);
+  attachAifisherReadResult(built.graph, read);
   const mainPrompt = built.config.prompt as { binding: { nodeId: string; path: string } } | undefined;
   const prompt = mainPrompt ? built.graph[mainPrompt.binding.nodeId]?.inputs[mainPrompt.binding.path.slice("inputs.".length)] : undefined;
   const warnings = [...new Set([...built.warnings,
@@ -39,6 +42,7 @@ export async function prepareWorkflowImport(source: unknown, filename: string, i
     signal?.throwIfAborted();
     if (reason instanceof Error && reason.name === "AbortError") throw reason;
     const pending = pendingWorkflowPackage(source, id, name, info, reason);
+    if (promptHint) pending.config.importPublishedPrompt = promptHint;
     if (read) {
       pending.config.importReader = aifisherReaderProvenance(read);
       const environmentReport = buildImportEnvironmentDiagnostics(read, { source, objectInfo: info });

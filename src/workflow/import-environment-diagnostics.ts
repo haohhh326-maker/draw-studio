@@ -2,6 +2,7 @@ import type { AifisherBindingCandidate, AifisherWorkflowReadResult } from "./aif
 import { isWorkflowCredentialFieldName } from "./credentials";
 import { isSampleMediaValueDiagnostic } from "./sample-media-diagnostics";
 import { remainingUnsupportedAifisherAssetGroups } from "./aifisher-variable-assets";
+import { comfyArtifactRoot } from "./comfy-artifact";
 
 type Data = Record<string, unknown>;
 type Scalar = string | number | boolean | null;
@@ -46,7 +47,7 @@ const optionSentinel = (value: unknown) => typeof value === "string" && /^(?:non
 function sourceNodes(source: unknown): Map<string, Data> {
   if (typeof source === "string") { try { source = JSON.parse(source); } catch { return new Map(); } }
   if (!object(source)) return new Map();
-  const root = object(source.prompt) ? source.prompt : source;
+  const root = comfyArtifactRoot(source);
   if (Array.isArray(root.nodes)) return new Map(root.nodes.filter(object).map(node => [String(node.id), node]));
   return new Map(Object.entries(root).filter(([, node]) => object(node) && (typeof node.class_type === "string" || object(node.inputs))) as [string, Data][]);
 }

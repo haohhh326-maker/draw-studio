@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { mkdir, readdir, readFile, rm } from "node:fs/promises";
+import { mkdir, readdir, rm } from "node:fs/promises";
 import path from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { readAIFisherWorkflow } from "../scripts/aifisher-workflow-reader";
@@ -26,14 +26,51 @@ async function isolatedRoot() {
 }
 
 describe("AIFISHER host transport and credential boundaries", () => {
-  it("bridges the real node-fetch stream into the unchanged upstream WHATWG reader without a deadline", async () => {
+  it.each(["headers", "body"] as const)("enforces the keyed read deadline while waiting for %s and removes its temporary files", async phase => {
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+    const caller = new AbortController();
+    const cancelBody = vi.fn();
+    let started!: (value: AbortSignal | null | undefined) => void;
+    const transportStarted = new Promise<AbortSignal | null | undefined>(resolve => { started = resolve; });
+    const projectRoot = await isolatedRoot();
+    const fetcher: typeof fetch = async (_url, init) => {
+      started(init?.signal);
+      if (phase === "headers") return new Promise<never>((_resolve, reject) => {
+        init?.signal?.addEventListener("abort", () => reject(init.signal?.reason), { once: true });
+      });
+      return new Response(new ReadableStream({ cancel: cancelBody }), { headers: { "Content-Type": "application/json" } });
+    };
+    const request = { environment: "runninghub-workflow", remote: {
+      baseUrl: "https://www.runninghub.cn", remoteId: appId, apiKey: "fixture-account-auth",
+    } } as const;
+    const outcome = readAIFisherWorkflow(request, { projectRoot, fetcher, signal: caller.signal }).catch(error => error);
+    try {
+      const transportSignal = await transportStarted;
+      await vi.advanceTimersByTimeAsync(31_000);
+      expect(transportSignal?.aborted).toBe(true);
+      expect(await outcome).toMatchObject({ status: 504, code: "RUNNINGHUB_REQUEST_TIMEOUT" });
+      if (phase === "body") expect(cancelBody).toHaveBeenCalledOnce();
+      expect(await readdir(path.join(projectRoot, ".cache"))).toEqual([]);
+      const graph = { result: { class_type: "SaveImage", inputs: { filename_prefix: "fixture-after-timeout" } } };
+      const recovered = vi.fn(async () => Response.json({ code: 0, data: { prompt: JSON.stringify(graph) } }));
+      expect((await readAIFisherWorkflow(request, { projectRoot, fetcher: recovered })).workflow).toEqual(graph);
+      expect(recovered).toHaveBeenCalledOnce();
+      expect(await readdir(path.join(projectRoot, ".cache"))).toEqual([]);
+    } finally {
+      caller.abort();
+      vi.useRealTimers();
+      if (phase === "headers") await outcome;
+    }
+  });
+
+  it("bridges the real node-fetch stream into the deadline-bound upstream WHATWG reader", async () => {
     const { Response: NodeResponse } = await vi.importActual<typeof import("node-fetch")>("node-fetch");
     const incoming = { appName: "Fixture", nodeInfoList: [{ nodeId: "1", fieldName: "prompt", fieldType: "STRING", fieldValue: "[sanitized prompt]" }] };
     nodeTransport.mockImplementation(async (url: string, init: RequestInit) => {
       expect(new URL(url).pathname).toBe("/api/webapp/apiCallDemo");
       expect(init).not.toHaveProperty("timeout");
       expect(init).not.toHaveProperty("timeoutMs");
-      expect(init.signal).toBeUndefined();
+      expect(init.signal).toBeInstanceOf(AbortSignal);
       return new NodeResponse(JSON.stringify({ code: 0, data: incoming }), { headers: { "content-type": "application/json" } });
     });
     const projectRoot = await isolatedRoot();
@@ -44,8 +81,6 @@ describe("AIFISHER host transport and credential boundaries", () => {
     expect(result.parameterBindings?.[0].key).toBe("field_1_prompt");
     expect(result.workflow?.["1"].inputs.prompt).toBe("[sanitized prompt]");
     expect(await readdir(path.join(projectRoot, ".cache"))).toEqual([]);
-    const wrapper = await readFile(path.resolve("scripts/aifisher-runninghub-import.ts"), "utf8");
-    expect(wrapper).not.toMatch(/AbortSignal\.timeout|setTimeout\(/);
   });
 
   it("removes explicit provider secrets before the original projection, stores and public DTO", async () => {
@@ -113,8 +148,9 @@ describe("AIFISHER host transport and credential boundaries", () => {
     const controller = new AbortController(), projectRoot = await isolatedRoot();
     await mkdir(path.join(projectRoot, ".cache", "unrelated"), { recursive: true });
     const fetcher = vi.fn(async (_url: string | URL | Request, init?: RequestInit) => {
-      expect(init?.signal).toBe(controller.signal);
+      expect(init?.signal?.aborted).toBe(false);
       controller.abort(new Error("Fixture cancellation"));
+      expect(init?.signal?.aborted).toBe(true);
       init?.signal?.throwIfAborted();
       return new Response("{}");
     }) as unknown as typeof fetch;

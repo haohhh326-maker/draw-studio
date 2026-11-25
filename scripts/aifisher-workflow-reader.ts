@@ -1,4 +1,4 @@
-import { analyzeWorkflow, createCapabilityProjection, normalizeApiWorkflow, parseWorkflowArtifact } from "../vendor/aifisher/server/workflowRuntime/workflowFormat.js";
+import { analyzeWorkflow, createCapabilityProjection, normalizeApiWorkflow, parseWorkflowArtifact, WORKFLOW_LIMITS } from "../vendor/aifisher/server/workflowRuntime/workflowFormat.js";
 import { deriveBindingCandidates } from "../vendor/aifisher/server/workflowRuntime/workflowBindingCompiler.js";
 import { normalizeHistoryOutputs, toOutputCandidateDto } from "../vendor/aifisher/server/workflowRuntime/workflowOutputs.js";
 import { readUpstreamRunningHubImport, type AifisherRunningHubRemote } from "./aifisher-runninghub-import";
@@ -6,6 +6,7 @@ import { workflowImportMediaSchema } from "./workflow-import-media-schema";
 import { applyDynamicWorkflowSchema } from "./workflow-import-dynamic-schema";
 import { revalidateWorkflowContracts } from "./workflow-import-contract-compat";
 import { guardGuiWorkflowCompilation } from "./workflow-import-gui-diagnostics";
+import { comfyApiEntries, comfyArtifactRoot } from "../src/workflow/comfy-artifact";
 
 export const AIFISHER_READER_SOURCE = Object.freeze({ repository: "https://github.com/Work-Fisher/AIFISHER", revision: "bdcf3bec054594fcab591952a8c5acef858d6de4" });
 type Data = Record<string, any>;
@@ -25,6 +26,7 @@ export interface AIFisherWorkflowReaderResult {
   upstream: typeof AIFISHER_READER_SOURCE;
   format: string;
   workflow: Data | null;
+  editorWorkflow?: Data;
   analysis: Data;
   bindingCandidates: Data[];
   parameterBindings?: Data[];
@@ -48,6 +50,22 @@ function artifactText(source: unknown): string {
   return JSON.stringify(source);
 }
 
+function parseLocalArtifact(source: unknown) {
+  const text = artifactText(source);
+  if (Buffer.byteLength(text) > WORKFLOW_LIMITS.maxBytes) return parseWorkflowArtifact(text);
+  let raw: unknown = source;
+  if (typeof source === "string") {
+    try { raw = JSON.parse(text.replace(/^\uFEFF/, "")); }
+    catch { return parseWorkflowArtifact(text); }
+  }
+  if (!record(raw)) return parseWorkflowArtifact(text);
+  const root = comfyArtifactRoot(raw);
+  if (Array.isArray(root.nodes)) return parseWorkflowArtifact(root === raw ? text : artifactText(root));
+  const entries = comfyApiEntries(root);
+  return parseWorkflowArtifact(root === raw && entries.length === Object.keys(root).length
+    ? text : artifactText(Object.fromEntries(entries)));
+}
+
 /** The host supplies transport/storage boundaries; all workflow services are full upstream modules. */
 export async function readAIFisherWorkflow(input: AIFisherWorkflowReaderRequest, options: { projectRoot?: string; fetcher?: typeof fetch; signal?: AbortSignal } = {}): Promise<AIFisherWorkflowReaderResult> {
   if (!record(input) || !["comfyui", "runninghub-workflow", "runninghub-webapp"].includes(input.environment)) throw new AIFisherWorkflowReaderError("请选择 ComfyUI 或 RunningHub 读取环境。");
@@ -61,7 +79,7 @@ export async function readAIFisherWorkflow(input: AIFisherWorkflowReaderRequest,
       outputEvidence: { state: candidateNodes.length ? "declared" : "unresolved", candidateNodes, outputs: [] } };
   }
   if (input.remote) throw new AIFisherWorkflowReaderError("本地 ComfyUI 读取不接受 RunningHub 远程凭证。");
-  const parsed = parseWorkflowArtifact(artifactText(input.source));
+  const parsed = parseLocalArtifact(input.source);
   const format = parsed.format;
   const analysisInfo = workflowImportMediaSchema(parsed.workflow, format, input.objectInfo);
   let analysis = analyzeWorkflow(parsed.workflow, format, { objectInfo: analysisInfo });

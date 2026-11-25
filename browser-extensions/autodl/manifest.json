@@ -1,0 +1,13 @@
+{
+  "manifest_version": 3,
+  "name": "Draw studio · AutoDL.Art",
+  "version": "1.2.0",
+  "description": "使用当前浏览器中的 AutoDL.Art 会话，为本机 Draw studio 管理已绑定实例。",
+  "minimum_chrome_version": "120",
+  "key": "MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEA62AoCKfMuyH/8UYJIOPztp3gBZzXHlr1XPAplxYFLANcV83K1SrvnTrGSutPVRRbQc8vVlpiJ/F3KWVx1RSrtSlSyXxrmzv/0lmvjsLZEaKdQVeP6mzmTVoLwKKD/qDPkXfCmH9sSGTazrGtID1ijdAjKT/RW+FG7upg/HJts0BUMJlDNzjZT8Sh5LjUDzn6uew3c8nmuo2GZFHi5HPXGWI4xnz1Vw6KGigZwBHLjg5GCqLjNQLI18Yt4GiLaydDsH0BT/sNR4pywSA+ucp8a/UVkWLy1wLuK7s/MRIL0HC5fMYYOXeAZqZoHEeU6JPP5kdcNspyL+6koprf09hTzwIDAQAB",
+  "permissions": ["scripting", "storage", "alarms"],
+  "host_permissions": ["http://127.0.0.1/*", "http://localhost/*", "https://www.autodl.art/*"],
+  "externally_connectable": { "matches": ["http://127.0.0.1/*", "http://localhost/*"] },
+  "background": { "service_worker": "worker.js", "type": "module" },
+  "action": { "default_popup": "popup.html", "default_title": "Draw studio · AutoDL.Art" }
+}

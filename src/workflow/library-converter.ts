@@ -2,6 +2,7 @@ import type { ApiWorkflow, Mapping, MediaInputPolicy, MediaKind, Mode, Parameter
 import { validateDefinition } from "../workflow-adapter/adapter";
 import { resolveWorkflowImportFamily } from "./import-category";
 import { readImportEnvironmentReport } from "./import-environment-diagnostics";
+import { comfyApiEntries, comfyArtifactRoot } from "./comfy-artifact";
 
 type ObjectData = Record<string, unknown>;
 export function workflowReaderProvenance(config: ObjectData): WorkflowDefinition["importReader"] {
@@ -33,6 +34,8 @@ const list = (value: unknown, label: string): ObjectData[] => {
 };
 const scalar = (value: unknown): value is string | number | boolean =>
   typeof value === "string" || typeof value === "boolean" || (typeof value === "number" && Number.isFinite(value));
+type EnumOption = ObjectData & { value: string | number | boolean };
+const scalarOption = (option: ObjectData): option is EnumOption => scalar(option.value);
 const string = (value: unknown, label: string) => {
   if (typeof value !== "string" || !value.trim()) throw new Error(label + " 缺失。");
   return value;
@@ -47,19 +50,40 @@ export function localized(value: unknown, fallback = ""): string {
   return fallback;
 }
 
+function enumPresentation(options: EnumOption[]): Pick<Parameter, "options" | "optionLabels" | "optionValues"> {
+  const counts = new Map<string, number>();
+  for (const { value } of options) counts.set(String(value), (counts.get(String(value)) ?? 0) + 1);
+  const used = new Set<string>();
+  const entries = options.map(option => {
+    const name = String(option.value);
+    const collides = counts.get(name)! > 1;
+    let key = name;
+    if (collides) {
+      const suffix = typeof option.value;
+      const base = name + ":" + suffix;
+      key = base;
+      for (let index = 2; counts.has(key) || used.has(key); index++) key = base + ":" + index;
+    }
+    used.add(key);
+    const label = localized(option.label, name);
+    const typeLabel = typeof option.value === "number" ? "数值" : typeof option.value === "boolean" ? "布尔" : "文本";
+    return { key, label: collides ? label + "（" + typeLabel + "）" : label, value: option.value };
+  });
+  return { options: entries.map(entry => entry.key), optionLabels: Object.fromEntries(entries.map(entry => [entry.key, entry.label])),
+    optionValues: Object.fromEntries(entries.map(entry => [entry.key, entry.value])) };
+}
+
 export function apiGraph(value: unknown): ApiWorkflow {
-  const raw = object(value, "执行文件");
-  if ("nodes" in raw) throw new Error("执行文件为编辑器格式，需要 ComfyUI API 格式。");
-  const nested = raw.prompt;
-  const envelope = nested && typeof nested === "object" && !Array.isArray(nested) && !("class_type" in nested) && !("inputs" in nested);
-  const graph = object(envelope ? nested : raw, "API 工作流");
-  if (!Object.keys(graph).length) throw new Error("API 工作流为空。");
-  for (const [id, value] of Object.entries(graph)) {
+  const root = comfyArtifactRoot(object(value, "执行文件"));
+  if (Array.isArray(root.nodes)) throw new Error("执行文件为编辑器格式，需要 ComfyUI API 格式。");
+  const entries = comfyApiEntries(root);
+  if (!entries.length) throw new Error("API 工作流为空。");
+  for (const [id, value] of entries) {
     const node = object(value, "API 节点 " + id);
     string(node.class_type, "节点类型 " + id);
     object(node.inputs, "节点输入 " + id);
   }
-  return structuredClone(graph) as ApiWorkflow;
+  return structuredClone(Object.fromEntries(entries)) as ApiWorkflow;
 }
 
 export type LibraryConversionSource = {
@@ -119,10 +143,7 @@ export function createLibraryRegistration(
     if (item.type === "integer" || item.type === "float") parameter.numericType = item.type;
     for (const range of ["min","max","step"] as const) if (typeof item[range] === "number" && Number.isFinite(item[range])) parameter[range] = item[range];
     if (type === "select") {
-      const options = records(item.options).filter(option => scalar(option.value));
-      parameter.options = options.map(option => String(option.value));
-      parameter.optionLabels = Object.fromEntries(options.map(option => [String(option.value),localized(option.label,String(option.value))]));
-      parameter.optionValues = Object.fromEntries(options.map(option => [String(option.value),option.value as string | number | boolean]));
+      Object.assign(parameter, enumPresentation(records(item.options).filter(scalarOption)));
     }
     const ui = asObject(item.ui);
     parameter.secret = item.secret === true || ui.password === true;
@@ -218,11 +239,9 @@ export function convertLibraryWorkflow(
     if (type === "text") parameter.multiline = ui.multiline === true;
     if (type === "select") {
       const options = list(item.options, "枚举选项");
-      if (!options.length || options.some(option => !scalar(option.value))) throw new Error("枚举选项无效：" + key);
-      parameter.options = options.map(option => String(option.value));
-      parameter.optionLabels = Object.fromEntries(options.map(option => [String(option.value), localized(option.label, String(option.value))]));
-      parameter.optionValues = Object.fromEntries(options.map(option => [String(option.value), option.value as string | number | boolean]));
-      if (!parameter.options.includes(String(item.defaultValue))) throw new Error("默认值不在枚举选项中：" + key);
+      if (!options.length || !options.every(scalarOption)) throw new Error("枚举选项无效：" + key);
+      if (!options.some(option => option.value === item.defaultValue)) throw new Error("默认值不在枚举选项中：" + key);
+      Object.assign(parameter, enumPresentation(options));
     }
     bind(key, item.binding);
     parameterBindings[key] = item.binding;

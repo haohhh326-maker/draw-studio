@@ -3,7 +3,7 @@ import type { AifisherBindingCandidate, AifisherWorkflowReadResult } from "./aif
 import type { ImportAnalysis, ImportOutputBinding } from "./import-analyzer";
 import { isWorkflowCredentialFieldName } from "./credentials";
 import { aifisherCanvasBindingCandidates, assertAifisherVariableAssetsSupported } from "./aifisher-variable-assets";
-import { automaticPromptCandidate } from "./automatic-prompt-binding";
+import { automaticPromptCandidate, type PublishedWorkflowPrompt } from "./automatic-prompt-binding";
 import { isSampleMediaValueDiagnostic } from "./sample-media-diagnostics";
 import { aifisherOutputPresentation } from "./aifisher-output-presentation";
 import { aifisherExternalAssetCandidate } from "./aifisher-io-contracts";
@@ -18,7 +18,7 @@ export function aifisherReaderProvenance(read: AifisherWorkflowReadResult): NonN
 }
 
 /** Adapt upstream DTO names to our controls; do not analyze or rewrite its graph. */
-export function aifisherImportAnalysis(read: AifisherWorkflowReadResult): ImportAnalysis {
+export function aifisherImportAnalysis(read: AifisherWorkflowReadResult, mainPrompt?: PublishedWorkflowPrompt): ImportAnalysis {
   const candidates = aifisherCanvasBindingCandidates(read);
   const fields = candidates.filter(candidate => scalar(candidate.value)).map(candidate => ({
     nodeId: candidate.nodeId, field: candidate.fieldName,
@@ -29,7 +29,8 @@ export function aifisherImportAnalysis(read: AifisherWorkflowReadResult): Import
       kind: (candidate.mediaKind === "mask" ? "image" : candidate.mediaKind) as "image" | "video" | "audio", required: candidate.required }));
   const media = new Set(inputs.map(input => input.nodeId + "\0" + input.field));
   const prompts = fields.filter(field => typeof field.value === "string" && !isWorkflowCredentialFieldName(field.field)
-    && !media.has(field.nodeId + "\0" + field.field) && /^(?:prompt|positive_prompt|positive_text|text|text_g|instruction|user_prompt)$/i.test(field.field))
+    && !media.has(field.nodeId + "\0" + field.field) && (mainPrompt?.nodeId === field.nodeId && mainPrompt.field === field.field
+      || /^(?:prompt|(?:positive|negative)_?(?:prompt|text)|text|text_g|instruction|user_prompt)$/i.test(field.field)))
     .map(field => ({ ...field, value: String(field.value) }));
   const { outputs } = aifisherOutputPresentation(read);
   const warnings = read.analysis.warnings.filter(warning => !isSampleMediaValueDiagnostic(read, warning)).map(warning => warning.code + (warning.nodeId ? " · " + warning.nodeId : "")
@@ -38,15 +39,15 @@ export function aifisherImportAnalysis(read: AifisherWorkflowReadResult): Import
   return { fields, inputs, prompts, outputs, warnings, errors: [] };
 }
 
-export function buildAifisherImportPackage(read: AifisherWorkflowReadResult, id: string, name: string) {
+export function buildAifisherImportPackage(read: AifisherWorkflowReadResult, id: string, name: string, publishedPrompt?: PublishedWorkflowPrompt) {
   if (!read.workflow || read.analysis.compileStatus !== "ready")
     throw new Error("AIFISHER 未完成工作流转换（" + read.analysis.compileStatus + "）；需要对应 ComfyUI 节点定义或 API Format。");
   assertAifisherVariableAssetsSupported(read);
   const graph: ApiWorkflow = structuredClone(read.workflow);
-  const analysis = aifisherImportAnalysis(read);
-  if (!analysis.outputs.length) throw new Error("AIFISHER 未识别到输出候选，请检查工作流保存节点。");
-  const chosenPrompt = automaticPromptCandidate(read);
+  const chosenPrompt = automaticPromptCandidate(read, publishedPrompt);
   const mainPrompt = chosenPrompt ? { nodeId: chosenPrompt.nodeId, field: chosenPrompt.fieldName } : undefined;
+  const analysis = aifisherImportAnalysis(read, mainPrompt);
+  if (!analysis.outputs.length) throw new Error("AIFISHER 未识别到输出候选，请检查工作流保存节点。");
   const mediaKeys = new Set(analysis.inputs.map(input => input.nodeId + "\0" + input.field));
   const used = new Set<string>();
   const parameters: Data[] = [];
@@ -89,6 +90,7 @@ export function buildAifisherImportPackage(read: AifisherWorkflowReadResult, id:
     nodeKind: presentation.kind, runnerType: "comfyui", mediaInputMode: "explicit", inputs, parameters,
     importReader: aifisherReaderProvenance(read),
     ...(mainPrompt ? { prompt: { required: false, binding: { target: "comfyui", nodeId: mainPrompt.nodeId, path: "inputs." + mainPrompt.field } } } : {}),
+    ...(mainPrompt && publishedPrompt && mainPrompt.nodeId === publishedPrompt.nodeId && mainPrompt.field === publishedPrompt.field ? { importPublishedPrompt: mainPrompt } : {}),
     execution: { file: "execution.api.json", modelRequirementsFile: "model.requirements.json", output: primaryOutput, ...(outputs.length > 1 ? { outputs } : {}) } };
   const requirements = { schemaVersion: 1, items: read.analysis.requirements.models.map(model => ({ name: model.name, required: true })) };
   return { graph, config, requirements, analysis, warnings: analysis.warnings };

@@ -1,5 +1,6 @@
 import type { Connection } from "../types";
-import type { AutoDLAcquireRequest, AutoDLLease, AutoDLPowerStatus, AutoDLSettingsInput } from "./types";
+import { autoDLInstanceUuidFromEndpoint } from "./endpoint";
+import type { AutoDLAccountSession, AutoDLAcquireRequest, AutoDLInstancesResult, AutoDLLease, AutoDLPowerStatus, AutoDLSettingsInput } from "./types";
 
 const root = "/__canvas/autodl";
 class AutoDLRequestError extends Error {
@@ -8,7 +9,7 @@ class AutoDLRequestError extends Error {
 
 async function request<T>(route: string, body?: unknown): Promise<T> {
   const controller = new AbortController();
-  const timer = window.setTimeout(() => controller.abort(), 30000);
+  const timer = window.setTimeout(() => controller.abort(), 30_000);
   try {
     const response = await fetch(`${root}/${route}`, {
       method: body === undefined ? "GET" : "POST",
@@ -32,7 +33,12 @@ async function request<T>(route: string, body?: unknown): Promise<T> {
 }
 
 export const getAutoDLStatus = () => request<AutoDLPowerStatus>("status");
-export const saveAutoDLSettings = (settings: AutoDLSettingsInput) => request<AutoDLPowerStatus>("settings", settings);
+export const getAutoDLSession = () => request<AutoDLAccountSession>("session");
+export const openAutoDLAccount = () => request<AutoDLAccountSession>("open-account", {});
+export const getAutoDLInstances = () => request<AutoDLInstancesResult>("instances");
+export const saveAutoDLSettings = (settings: AutoDLSettingsInput) => request<AutoDLPowerStatus>("settings", {
+  enabled: settings.enabled, endpoint: settings.endpoint, instanceUuid: settings.instanceUuid,
+});
 export const checkAutoDLSettings = () => request<AutoDLPowerStatus>("check", {});
 export const retryAutoDLShutdown = () => request<AutoDLPowerStatus>("retry-shutdown", {});
 
@@ -56,15 +62,17 @@ export async function autoDLTaskPower(connection: Connection, options: {
   signal: AbortSignal;
   onStatus: (message: string) => void;
 }): Promise<AutoDLTaskPower | undefined> {
-  if (!connection.autodl?.instanceUuid) return;
+  const instanceUuid = autoDLInstanceUuidFromEndpoint(connection.baseUrl) ?? connection.autodl?.instanceUuid;
+  if (!instanceUuid) return;
   options.signal.throwIfAborted();
   options.onStatus("正在启动 AutoDL 云端实例…");
-  const input: AutoDLAcquireRequest = { endpoint: connection.baseUrl, instanceUuid: connection.autodl.instanceUuid,
+  const input: AutoDLAcquireRequest = { endpoint: connection.baseUrl, instanceUuid,
     taskId: options.taskId, attemptId: options.attemptId };
   // Keep the response observable even if the task is cancelled while acquisition is in flight.
   let lease: AutoDLLease;
   try { lease = await request<AutoDLLease>("acquire", input); }
   catch (error) {
+    if (error instanceof AutoDLRequestError && [400, 403, 404, 409].includes(error.status)) throw error;
     // A timed-out/lost response does not prove the server rejected acquisition.
     // Cancel this exact attempt independently; never repeat a potentially paid acquire.
     await request("release", input).catch(() => options.onStatus("AutoDL 启动响应丢失，关机清理尚未确认，请在算力设置中检查。"));
@@ -96,6 +104,7 @@ export async function autoDLTaskPower(connection: Connection, options: {
       lease = value;
       const error = leaseError(value);
       if (error) lostLease(error);
+      else if (value.phase === "starting" && value.message) options.onStatus(value.message);
     }).catch(error => {
       if (released) return;
       if (error instanceof AutoDLRequestError && [404, 410].includes(error.status))
@@ -107,6 +116,7 @@ export async function autoDLTaskPower(connection: Connection, options: {
   try {
     const initialError = leaseError(lease);
     if (initialError) lostLease(initialError);
+    else if (lease.phase === "starting" && lease.message) options.onStatus(lease.message);
     while (lease.phase !== "ready") {
       signal.throwIfAborted();
       await pause(signal);

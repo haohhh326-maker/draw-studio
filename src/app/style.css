@@ -952,8 +952,6 @@ small,
 .prompt::placeholder {
   color: var(--muted);
 }
-.workflow-text-inputs { display: grid; gap: 10px; max-height: 220px; overflow: auto; padding: 10px 0; }
-.workflow-text-inputs textarea { width: 100%; min-height: 58px; resize: vertical; background: var(--surface); border: 1px solid var(--border-strong); border-radius: 6px; color: var(--text); padding: 8px; }
 .generation-panel.expanded .prompt {
   height: 230px;
 }

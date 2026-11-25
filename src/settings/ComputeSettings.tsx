@@ -14,6 +14,8 @@ import "./compute-settings.css";
 import { MuseSettings } from "../muse/MuseSettings";
 import { useMuseSession } from "../muse/session";
 import { AutoDLPowerSettings } from "../autodl/AutoDLPowerSettings";
+import { checkAutoDLSettings, getAutoDLStatus } from "../autodl/client";
+import { autoDLInstanceUuidFromEndpoint, sameAutoDLEndpoint } from "../autodl/endpoint";
 
 
 const RunningHubWorkflowDialog = lazy(() => import("../runninghub/RunningHubWorkflowDialog").then(module => ({ default: module.RunningHubWorkflowDialog })));
@@ -45,6 +47,8 @@ export function ComputeSettings({ onClose, initialProvider }: {
   const [tab, setTab] = useState<ComputeProvider>(initialProvider ?? provider);
   const [cloudDraft, setCloudDraft] = useState<ConnectionDraft>(() => connectionDraft(connection));
   const [feedback, setFeedback] = useState("");
+  const [cloudChecking, setCloudChecking] = useState(false);
+  const cloudCheckPending = useRef(false), cloudAlive = useRef(false);
   const [cloudFilesOpen, setCloudFilesOpen] = useState(false);
   const [manager, setManager] = useState<{ initialId?: string; refreshOnOpen?: boolean } | null>(null);
   const managerOpen = useRef(false);
@@ -59,6 +63,7 @@ export function ComputeSettings({ onClose, initialProvider }: {
   const site = selectedSite(runningHub);
 
   useEffect(() => {
+    cloudAlive.current = true;
     const previousFocus = document.activeElement instanceof HTMLElement ? document.activeElement : null;
     panelRef.current?.querySelector<HTMLButtonElement>('[role="tab"][aria-selected="true"]')?.focus();
     const keydown = (event: KeyboardEvent) => {
@@ -72,7 +77,7 @@ export function ComputeSettings({ onClose, initialProvider }: {
       else if (!event.shiftKey && document.activeElement === last) { event.preventDefault(); first?.focus(); }
     };
     document.addEventListener("keydown", keydown, true);
-    return () => { document.removeEventListener("keydown", keydown, true); if (previousFocus?.isConnected) previousFocus.focus(); };
+    return () => { cloudAlive.current = false; document.removeEventListener("keydown", keydown, true); if (previousFocus?.isConnected) previousFocus.focus(); };
   }, []);
 
   function changeTab(next: ComputeProvider) { setTab(next); setFeedback(""); }
@@ -90,9 +95,51 @@ export function ComputeSettings({ onClose, initialProvider }: {
     catch (error) { setFeedback(error instanceof Error ? error.message : "连接配置无效，请检查远程地址与认证信息。"); }
   }
   async function saveAndCheck() {
+    if (cloudCheckPending.current) return;
+    cloudCheckPending.current = true; setCloudChecking(true);
     setFeedback("");
-    try { await connectWorkstation(saveCloud()); }
-    catch (error) { setFeedback(error instanceof Error ? error.message : "连接配置无效，请检查远程地址与认证信息。"); }
+    let next: Connection | undefined, managedCheck = false;
+    const stillCurrent = (expected: Connection) => {
+      const current = useStore.getState().connection;
+      return cloudAlive.current && sameAutoDLEndpoint(current.baseUrl, expected.baseUrl) && current.token === expected.token
+        && current.authHeader === expected.authHeader && current.authPrefix === expected.authPrefix
+        && current.autodl?.instanceUuid === expected.autodl?.instanceUuid;
+    };
+    try {
+      next = saveCloud();
+      const instanceUuid = autoDLInstanceUuidFromEndpoint(next.baseUrl) ?? next.autodl?.instanceUuid;
+      if (instanceUuid) {
+        setFeedback("正在确认 AutoDL 实例状态…");
+        const power = await getAutoDLStatus();
+        if (!stillCurrent(next)) return;
+        if (power.settings.enabled && sameAutoDLEndpoint(power.settings.endpoint, next.baseUrl) && power.settings.instanceUuid === instanceUuid) {
+          managedCheck = true;
+          const checked = await checkAutoDLSettings();
+          if (!stillCurrent(next)) return;
+          if (!checked.settings.enabled || !sameAutoDLEndpoint(checked.settings.endpoint, next.baseUrl) || checked.settings.instanceUuid !== instanceUuid)
+            throw new Error("AutoDL 绑定已变更，请确认自动开关机设置后重新检测。");
+          if (checked.pendingStop) throw new Error("AutoDL 关机尚未确认，请先处理关机状态。");
+          if (checked.phase === "off") {
+            const message = "实例已关机，生成时自动启动。";
+            useStore.setState({ connectionState: "offline", connectionInfo: message }); setFeedback(message); return;
+          }
+          if (checked.phase === "error" || checked.error) throw new Error(checked.error || checked.message || "无法确认 AutoDL 实例状态，请重试。");
+          if (checked.phase !== "ready") {
+            const message = checked.phase === "starting" ? "AutoDL 实例正在开机，请等待服务就绪后再检测。"
+              : checked.phase === "stopping" ? "AutoDL 实例正在关机，生成时会自动启动。" : "AutoDL 实例状态尚未确认，请稍后重新检测。";
+            useStore.setState({ connectionState: "offline", connectionInfo: message }); setFeedback(message); return;
+          }
+        }
+      }
+      if (!stillCurrent(next)) return;
+      setFeedback(""); await connectWorkstation(next);
+    } catch (error) {
+      if (cloudAlive.current && (!next || stillCurrent(next))) {
+        const message = error instanceof Error ? error.message : "连接配置无效，请检查远程地址与认证信息。";
+        if (managedCheck) useStore.setState({ connectionState: "offline", connectionInfo: message });
+        setFeedback(message);
+      }
+    } finally { cloudCheckPending.current = false; if (cloudAlive.current) setCloudChecking(false); }
   }
   const cloudField = (key: keyof ConnectionDraft, value: string) => {
     try { setCloudDraft(updateConnectionDraft(cloudDraft, key, value)); setFeedback(""); }
@@ -145,7 +192,7 @@ export function ComputeSettings({ onClose, initialProvider }: {
         {tab === "comfyui" && !cloudFilesOpen && <div className="compute-settings-footer"><small>连接配置保存在本机；点击“保存并检测”才会检测连接。</small><div>
           <button type="button" disabled={cloudChanged || activeState === "connecting"} title={cloudChanged ? "请先保存连接配置" : "添加或重新读取工作流"} onClick={() => { onClose(); useStore.setState({ modal: "workflow-library" }); }}><FolderOpen size={15} aria-hidden="true" />工作流目录</button>
           <button type="button" onClick={save}>保存到本机</button>
-          {activeState === "connecting" ? <button type="button" onClick={cancelWorkstationCheck}><LoaderCircle size={15} className="compute-check-spin" aria-hidden="true" />取消检测</button> : <button type="button" className="primary" disabled={!cloudDraft.baseUrl.trim()} onClick={() => void saveAndCheck()}>保存并检测</button>}
+          {activeState === "connecting" ? <button type="button" onClick={cancelWorkstationCheck}><LoaderCircle size={15} className="compute-check-spin" aria-hidden="true" />取消检测</button> : <button type="button" className="primary" disabled={cloudChecking || !cloudDraft.baseUrl.trim()} onClick={() => void saveAndCheck()}>{cloudChecking ? "检测中…" : "保存并检测"}</button>}
         </div></div>}
       </div>
     </Modal>

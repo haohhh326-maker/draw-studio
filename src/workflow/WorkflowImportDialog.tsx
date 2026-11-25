@@ -1,5 +1,5 @@
 import { lazy, Suspense, useEffect, useRef, useState } from "react";
-import { Check, FileJson, LoaderCircle, Upload, RefreshCw, X } from "lucide-react";
+import { Check, FileJson, Link2, LoaderCircle, Upload, RefreshCw, X } from "lucide-react";
 import { Modal } from "../components/ui";
 import { useStore, activeCanvas } from "../stores/store";
 import { findWorkflow } from "./catalog";
@@ -19,8 +19,13 @@ import { WorkflowBindingReview } from "./WorkflowBindingReview";
 import { importReadiness } from "./import-review";
 import { ImportEnvironmentReport } from "./ImportEnvironmentReport";
 import { isRunningHubNativeConnection } from "../runninghub/native-connection";
+import { readRunningHubWorkflowForComfyUI } from "../runninghub/native-workflow-import";
+import { runningHubSite } from "../compute/providers";
+import type { PublishedWorkflowPrompt } from "./automatic-prompt-binding";
 
 type Format = "api" | "editor";
+type ImportSource = ({ kind: "file"; file: File } | { kind: "runninghub"; name: string; reference: string }) & { format?: Format };
+type LoadedWorkflow = { selection: ImportSource; filename: string; source: unknown; publishedPrompt?: PublishedWorkflowPrompt };
 type Imported = { prepared: PreparedWorkflowImport; saved: WorkflowImportResult; warnings: string[]; liveSchema?: boolean };
 const RunningHubRemoteWorkflowDialog = lazy(() => import("../runninghub/RunningHubRemoteWorkflowDialog").then(module => ({ default: module.RunningHubRemoteWorkflowDialog })));
 
@@ -39,7 +44,8 @@ function LocalWorkflowImportDialog() {
   const [hovered, setHovered] = useState<Format>();
   const [result, setResult] = useState<Imported>();
   const [registered, setRegistered] = useState(false);
-  const [selectedFile, setSelectedFile] = useState<{ file: File; format?: Format }>();
+  const [selectedSource, setSelectedSource] = useState<ImportSource>();
+  const [runningHubLink, setRunningHubLink] = useState("");
   const [schemaWarnings, setSchemaWarnings] = useState<string[]>([]);
   const inputs = { api: useRef<HTMLInputElement>(null), editor: useRef<HTMLInputElement>(null) };
   const revision = useRef(0);
@@ -53,10 +59,10 @@ function LocalWorkflowImportDialog() {
     setResult(previous => previous ? { ...previous, liveSchema: false } : previous);
   }, [connectionKey]);
 
-  function clearFile() {
+  function clearSource() {
     revision.current++;
     pending.current?.abort(); pending.current = undefined;
-    setSelectedFile(undefined); setResult(undefined); setRegistered(false);
+    setSelectedSource(undefined); setRunningHubLink(""); setResult(undefined); setRegistered(false);
     setBusy(""); setError(""); setSchemaWarnings([]); setHovered(undefined);
     for (const input of Object.values(inputs)) if (input.current) input.current.value = "";
   }
@@ -73,29 +79,41 @@ function LocalWorkflowImportDialog() {
 
   async function readFile(file?: File) {
     if (!file) return;
+    const selection = { kind: "file", file } as const;
     await readWorkflow(async () => {
       if (file.size > 32 * 1024 * 1024) throw new Error("工作流文件不能超过 32 MB。");
-      return { file, source: JSON.parse((await file.text()).replace(/^\uFEFF/, "")) as unknown };
-    }, { file });
+      return { selection, filename: file.name, source: JSON.parse((await file.text()).replace(/^\uFEFF/, "")) as unknown };
+    }, "正在读取工作流…", selection);
   }
 
-  async function readWorkflow(load: (signal: AbortSignal) => Promise<{ file: File; source: unknown }>, selection?: { file: File }) {
+  async function readRunningHubLink(value: string) {
+    const reference = value.trim();
+    if (!reference) return;
+    const { runningHubConnections, runningHubConnection } = useStore.getState();
+    await readWorkflow(async signal => {
+      const { source, name, fileName, publishedPrompt } = await readRunningHubWorkflowForComfyUI(reference, runningHubConnections,
+        runningHubSite(runningHubConnection.baseUrl), signal);
+      return { selection: { kind: "runninghub", name, reference }, filename: fileName, source, publishedPrompt };
+    }, "正在读取 RunningHub 工作流…");
+  }
+
+  async function readWorkflow(load: (signal: AbortSignal) => Promise<LoadedWorkflow>, readingMessage: string, selection?: ImportSource) {
     const current = ++revision.current;
     pending.current?.abort();
     const controller = new AbortController(); pending.current = controller;
-    setSelectedFile(selection);
-    setResult(undefined); setRegistered(false); setError(""); setSchemaWarnings([]); setHovered(undefined); setBusy("正在读取工作流…");
+    setSelectedSource(selection);
+    setResult(undefined); setRegistered(false); setError(""); setSchemaWarnings([]); setHovered(undefined); setBusy(readingMessage);
     const connection = useStore.getState().connection;
     let schema: Awaited<ReturnType<typeof loadImportSchema>> = { warnings: [] };
     try {
-      const { source, file } = await load(controller.signal);
+      const { source, filename, selection: loaded, publishedPrompt } = await load(controller.signal);
       controller.signal.throwIfAborted();
       const format = detectWorkflowFormat(source);
       if (current !== revision.current) return;
-      setSelectedFile({ file, format });
+      setSelectedSource({ ...loaded, format });
       setBusy("正在自动识别节点、输入、输出和分类…");
-      const automatic = await prepareAutomaticWorkflowImport(source, file.name, connection, controller.signal,
-        message => { if (current === revision.current) setBusy(message); }, { installMissingPlugins });
+      const automatic = await prepareAutomaticWorkflowImport(source, filename, connection, controller.signal,
+        message => { if (current === revision.current) setBusy(message); }, { installMissingPlugins, publishedPrompt });
       schema = automatic.schema;
       if (current !== revision.current) return;
       setSchemaWarnings(schema.warnings);
@@ -178,17 +196,30 @@ function LocalWorkflowImportDialog() {
   const readiness = result && importReadiness(result.prepared, result.liveSchema);
   const environmentReport = result?.prepared.importState.environmentReport;
   const additionalDiagnostics = diagnostics.filter(item => !environmentReport?.issues.some(issue => issue.code === item.code && issue.nodeId === item.nodeId && issue.field === item.field));
+  const selectedFile = selectedSource?.kind === "file" ? selectedSource.file : undefined;
+  const linked = selectedSource?.kind === "runninghub" ? selectedSource : undefined;
   return <Modal title="添加工作流" wide onClose={() => useStore.setState({ modal: null })}>
     <div className="workflow-import-content">
-      <p className="workflow-import-intro">{selectedFile ? "点文件右侧的 × 可清除选择，重新上传工作流。" : "拖入工作流，自动读取提示词、素材输入和参数，完成后直接使用。优先选择 API JSON。"}</p>
+      {!selectedSource && <form className="workflow-import-link" onSubmit={event => {
+        event.preventDefault();
+        if (!busy) void readRunningHubLink(runningHubLink);
+      }}>
+        <label htmlFor="workflow-import-runninghub-link">RunningHub 链接</label>
+        <div>
+          <input id="workflow-import-runninghub-link" placeholder="粘贴工作流或 AI 应用链接" value={runningHubLink} disabled={!!busy}
+            autoComplete="off" spellCheck={false} onChange={event => setRunningHubLink(event.target.value)} />
+          <button className="primary" type="submit" disabled={!!busy || !runningHubLink.trim()}><Link2 size={16} aria-hidden="true" />读取并添加</button>
+        </div>
+      </form>}
+      {!selectedSource && <p className="workflow-import-intro">也可以拖入 JSON 工作流，自动识别提示词、素材和参数。</p>}
       <label className="workflow-import-install-option"><input type="checkbox" checked={installMissingPlugins} disabled={!!busy} onChange={event => setInstallMissingPlugins(event.target.checked)} />安装缺失插件（通过 ComfyUI Manager，可能需要重启）</label>
-      {selectedFile ? <section className="workflow-import-selection" aria-label="已选择的工作流文件">
-        <FileJson size={24} aria-hidden="true" />
-        <div><strong>{selectedFile.file.name}</strong><span>
-          {selectedFile.format === "api" ? "API JSON" : selectedFile.format === "editor" ? "普通 JSON" : "JSON 文件"}
-          {" · " + (selectedFile.file.size < 1024 * 1024 ? Math.max(1, Math.round(selectedFile.file.size / 1024)) + " KB" : (selectedFile.file.size / 1024 / 1024).toFixed(1) + " MB")}
+      {selectedSource ? <section className="workflow-import-selection" aria-label={linked ? "已读取的 RunningHub 工作流" : "已选择的工作流文件"}>
+        {linked ? <Link2 size={24} aria-hidden="true" /> : <FileJson size={24} aria-hidden="true" />}
+        <div><strong>{linked?.name ?? selectedFile?.name}</strong><span>
+          {linked ? "RunningHub 工作流" : selectedSource.format === "api" ? "API JSON" : selectedSource.format === "editor" ? "普通 JSON" : "JSON 文件"}
+          {selectedFile && " · " + (selectedFile.size < 1024 * 1024 ? Math.max(1, Math.round(selectedFile.size / 1024)) + " KB" : (selectedFile.size / 1024 / 1024).toFixed(1) + " MB")}
         </span>{result && <small>已添加的工作流保留在目录中</small>}</div>
-        <button type="button" className="workflow-import-clear" aria-label="清除所选工作流文件" title="清除选择，重新上传" onClick={clearFile}><X size={19} /></button>
+        <button type="button" className="workflow-import-clear" aria-label={linked ? "清除所选工作流链接" : "清除所选工作流文件"} title="清除工作流选择" onClick={clearSource}><X size={19} /></button>
       </section> : <div className="workflow-import-zones">
         {(["api", "editor"] as const).map(format => <div key={format}
           className={"workflow-import-zone " + (hovered === format ? "dragging" : "")}
@@ -215,17 +246,20 @@ function LocalWorkflowImportDialog() {
         {registered ? "已添加" : "文件已保存"}
       </strong>
         <p>{result.prepared.name}</p>
-        {readiness && <dl className="workflow-import-readiness"><div><dt>读取</dt><dd>{readiness.read}</dd></div><div><dt>绑定</dt><dd>{readiness.bindings}</dd></div><div><dt>执行检查</dt><dd>{readiness.execution}</dd></div></dl>}
+        {readiness && <dl className="workflow-import-readiness"><div><dt>读取</dt><dd>{readiness.read}</dd></div><div><dt>绑定</dt><dd>{readiness.bindings}</dd></div><div><dt>执行检查</dt><dd>{linked && !result.liveSchema ? "待校验 · 实例可用后再检查节点和模型" : readiness.execution}</dd></div></dl>}
         {family && <p>已归类到：{family}</p>}
-        <p>{pendingResult ? "原始 JSON 已完整保留。若参数顺序无法确定，请从对应 ComfyUI 导出 API JSON；缺少插件时可勾选安装后重新检查。" : (result.prepared.format === "editor" ? "普通 JSON 已自动转换" : "已读取 API JSON") + " · " + result.prepared.analysis.outputs.length + " 个输出 · " + result.prepared.analysis.inputs.length + " 个素材输入"}</p>
+        <p>{pendingResult ? "原始 JSON 已完整保留。若参数顺序无法确定，请从对应 ComfyUI 导出 API JSON；缺少插件时可勾选安装后重新检查。" :
+          (result.prepared.format === "editor" ? "普通 JSON 已自动转换" : "已读取 API JSON") + " · " + result.prepared.analysis.outputs.length + " 个输出"}</p>
+        {!pendingResult && <p>{result.prepared.analysis.prompts.length} 个提示词字段 · {result.prepared.analysis.inputs.length} 个素材输入</p>}
         <p className="workflow-import-path">{result.saved.path}</p>
         {environmentReport && <ImportEnvironmentReport report={environmentReport} />}
         {!!additionalDiagnostics.length && <div className="workflow-import-notes"><strong>{pendingResult ? "其他待处理事项" : "插件处理结果"}（{additionalDiagnostics.length}）</strong><ul>{additionalDiagnostics.map((item, index) => <li key={index}>{item.code.startsWith("manager-plugin-") && item.classType && <strong>{item.classType}： </strong>}{item.message}</li>)}</ul></div>}
         {!!result.warnings.length && <details className="workflow-import-notes"><summary>导入提示（{result.warnings.length}）</summary><ul>{result.warnings.map((item, index) => <li key={index}>{item}</li>)}</ul></details>}
         {!pendingResult && <details className="workflow-import-bindings"><summary>查看自动识别的输入和输出</summary>
+          {!!result.prepared.analysis.prompts.length && <ul>{result.prepared.analysis.prompts.map(field => <li key={field.nodeId + "." + field.field}>{field.label} · 文本</li>)}</ul>}
           <ul>{result.prepared.analysis.inputs.map(input => <li key={input.nodeId + "." + input.field}>{input.label} · {input.required === false ? "可选素材" : "素材输入"}</li>)}</ul>
           <ul>{result.prepared.analysis.outputs.map(output => <li key={output.nodeId + "." + output.field}>{output.label} · {output.field === "*" ? "自动识别返回结果" : output.field}</li>)}</ul>
-          <p className="workflow-import-binding-hint">原有提示词、模型、参数和各输出分支已保留，可在画布高级参数中修改。</p>
+          <p className="workflow-import-binding-hint">在画布的生成面板中填写提示词和其他文本输入。</p>
         </details>}
         <div className="workflow-import-actions">
           {!registered && <button className="primary" disabled={!!busy || libraryState === "loading"} onClick={() => void refreshSaved()}><RefreshCw size={16} />刷新目录</button>}
@@ -234,7 +268,10 @@ function LocalWorkflowImportDialog() {
         </div>
         {registered && <WorkflowBindingReview prepared={result.prepared} busy={!!busy} onSave={saveBindings} />}
       </section>}
-      {!!error && !result && selectedFile && !busy && <button className="primary" onClick={() => void readFile(selectedFile.file)}>重试添加</button>}
+      {!!error && !result && selectedSource && !busy && <button className="primary" onClick={() => {
+        if (linked) void readRunningHubLink(linked.reference);
+        else void readFile(selectedFile);
+      }}>重试添加</button>}
       <p className="workflow-import-destination">保存到：{library?.sourcePath || "当前配置的本地工作流目录"}</p>
     </div>
   </Modal>;

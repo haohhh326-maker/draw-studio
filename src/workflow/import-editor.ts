@@ -1,4 +1,5 @@
 import type { ApiWorkflow } from "../types";
+import { comfyApiEntries, comfyArtifactRoot } from "./comfy-artifact";
 
 type RecordValue = Record<string, unknown>;
 type Port = { name: string; type?: unknown; link?: unknown; widget?: unknown };
@@ -150,13 +151,9 @@ function fail(label: string): never {
 
 /** File names are not reliable: both ComfyUI formats use the .json extension. */
 export function detectWorkflowFormat(value: unknown): "api" | "editor" {
-  const root = object(value, "工作流");
-  const graph = record(root.prompt) ? root.prompt : root;
+  const graph = comfyArtifactRoot(object(value, "工作流"));
   if (Array.isArray(graph.nodes)) return "editor";
-  const metadata = new Set(["workflow", "extra_pnginfo", "extra_data", "metadata"]);
-  const entries = Object.entries(graph)
-    .filter(([key, node]) => !metadata.has(key) || (record(node) && (Object.hasOwn(node, "class_type") || Object.hasOwn(node, "inputs"))))
-    .map(([, node]) => node);
+  const entries = comfyApiEntries(graph).map(([, node]) => node);
   if (
     entries.length &&
     entries.every(
@@ -835,6 +832,15 @@ function widgets(
     delete migrated.save_image;
     values = migrated;
   }
+  // Older rgthree editors saved a converted INT widget and its rendered text.
+  // The backend only receives the linked input.
+  if (node.type === "Display Int (rgthree)" && Array.isArray(values) &&
+      values.length === 2 && values[0] === 0 && typeof values[1] === "string" && /^(?:-?\d+)?$/.test(values[1]) &&
+      specs.length === 1 && specs[0].name === "input" && specs[0].type === "INT" && specs[0].options.forceInput === true &&
+      node.inputs?.some(port => port.name === "input" && port.link != null)) values = [];
+  // KJNodes serialized its Update inputs action as a trailing null.
+  if (node.type === "ImageConcatMulti" && Array.isArray(values) && values.length === 4 && values[3] === null &&
+      specs.filter(isWidget).map(spec => spec.name).join(",") === "inputcount,direction,match_image_size") values = values.slice(0, 3);
   const result: RecordValue = {};
   function expandCombo(index: number, value: unknown): void {
     const spec = specs[index];
@@ -895,6 +901,13 @@ function widgets(
         }
         expandCombo(index, values[spec.name]);
       } else if (Object.hasOwn(values, specs[index].name)) expandCombo(index, values[specs[index].name]);
+    // Older H.264 saves predate audio trimming. Keep that behavior when the
+    // selected format explicitly declares the legacy default.
+    if (node.type === "VHS_VideoCombine" && values.format === "video/h264-mp4" && !Object.hasOwn(values, "trim_to_audio") &&
+        !node.inputs?.some(port => port.name === "trim_to_audio" && port.link != null) &&
+        specs.some(spec => spec.name === "trim_to_audio" && spec.type === "BOOLEAN" && spec.options.default === false)) {
+      values = { ...values, trim_to_audio: false };
+    }
     for (const [name, value] of Object.entries(values)) {
       const spec = specs.find((entry) => entry.name === name);
       if (!spec) {

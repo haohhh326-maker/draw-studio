@@ -1,6 +1,9 @@
+import type { ApiWorkflow } from "../types";
 import type { PreparedWorkflowImport } from "./import-pipeline";
 import type { ImportOutputKind } from "./import-analyzer";
 import { isWorkflowCredentialFieldName } from "./credentials";
+import { aifisherReadResultFor } from "./aifisher-reader-client";
+import { automaticPromptCandidate, type PublishedWorkflowPrompt } from "./automatic-prompt-binding";
 
 type Target = { nodeId: string; field: string; classType: string };
 export type ImportBindingReview = {
@@ -32,6 +35,41 @@ export function initialImportReview(prepared: PreparedWorkflowImport): ImportBin
   };
 }
 
+function withPromptBinding(prepared: PreparedWorkflowImport, graph: ApiWorkflow, prompt: PublishedWorkflowPrompt | null) {
+  const config = structuredClone(prepared.config);
+  const parameters = (Array.isArray(config.parameters) ? config.parameters : []).filter(record);
+  const previous = initialImportReview(prepared).prompt;
+  if (previous && (!prompt || identity(previous.nodeId, previous.field) !== identity(prompt.nodeId, prompt.field))
+    && !parameters.some(parameter => parameter.binding?.nodeId === previous.nodeId && parameter.binding?.path === "inputs." + previous.field)) {
+    const base = "input:" + previous.nodeId + ":" + previous.field;
+    let key = base;
+    for (let suffix = 2; parameters.some(parameter => parameter.id === key); suffix++) key = base + ":" + suffix;
+    parameters.push({ id: key, type: "string", label: (graph[previous.nodeId]._meta?.title ?? previous.nodeId) + " · " + previous.field,
+      defaultValue: graph[previous.nodeId].inputs[previous.field], ui: { placement: "advanced", multiline: true },
+      binding: { target: "comfyui", nodeId: previous.nodeId, path: "inputs." + previous.field } });
+  }
+  config.parameters = parameters.filter(parameter => !prompt || parameter.binding?.nodeId !== prompt.nodeId || parameter.binding?.path !== "inputs." + prompt.field);
+  if (prompt) config.prompt = { required: false, binding: { target: "comfyui", nodeId: prompt.nodeId, path: "inputs." + prompt.field } };
+  else delete config.prompt;
+  return config;
+}
+
+/** Revalidate a locator against the reader used for this exact import. */
+export function restorePublishedImportPrompt(prepared: PreparedWorkflowImport, target: PublishedWorkflowPrompt): PreparedWorkflowImport {
+  if (!prepared.graph || prepared.importState.status !== "ready") return prepared;
+  const read = aifisherReadResultFor(prepared.graph);
+  const chosen = read && automaticPromptCandidate(read, target);
+  if (!chosen || chosen.nodeId !== target.nodeId || chosen.fieldName !== target.field) return prepared;
+  const config = withPromptBinding(prepared, prepared.graph, target);
+  config.importPublishedPrompt = target;
+  const prompt = prepared.graph[target.nodeId].inputs[target.field];
+  const fields = prepared.analysis.prompts;
+  const field = prepared.analysis.fields.find(candidate => candidate.nodeId === target.nodeId && candidate.field === target.field);
+  const prompts = field && typeof field.value === "string" && !fields.some(candidate => candidate.nodeId === target.nodeId && candidate.field === target.field)
+    ? [...fields, { ...field, value: field.value }] : fields;
+  return { ...prepared, config, prompt: typeof prompt === "string" ? prompt : "", analysis: { ...prepared.analysis, prompts } };
+}
+
 /** Apply explicit canvas bindings only; the upstream execution graph stays intact. */
 export function applyImportReview(prepared: PreparedWorkflowImport, review: ImportBindingReview): PreparedWorkflowImport {
   if (!prepared.graph || prepared.importState.status !== "ready") throw new Error("请先完成工作流转换，再确认提示词和输出。");
@@ -51,27 +89,14 @@ export function applyImportReview(prepared: PreparedWorkflowImport, review: Impo
     seen.add(key);
   }
   if (new Set(review.outputs.map(output => output.nodeId)).size !== candidates.size) throw new Error("请保留并确认全部输出候选。");
-  const config = structuredClone(prepared.config);
-  const parameters = (Array.isArray(config.parameters) ? config.parameters : []).filter(record);
-  const previous = initialImportReview(prepared).prompt;
-  if (previous && (!review.prompt || identity(previous.nodeId, previous.field) !== identity(review.prompt.nodeId, review.prompt.field))
-    && !parameters.some(parameter => parameter.binding?.nodeId === previous.nodeId && parameter.binding?.path === "inputs." + previous.field)) {
-    const base = "input:" + previous.nodeId + ":" + previous.field;
-    let key = base;
-    for (let suffix = 2; parameters.some(parameter => parameter.id === key); suffix++) key = base + ":" + suffix;
-    parameters.push({ id: key, type: "string", label: (graph[previous.nodeId]._meta?.title ?? previous.nodeId) + " · " + previous.field,
-      defaultValue: graph[previous.nodeId].inputs[previous.field], ui: { placement: "advanced", multiline: true },
-      binding: { target: "comfyui", nodeId: previous.nodeId, path: "inputs." + previous.field } });
-  }
-  config.parameters = parameters.filter(parameter => !review.prompt || parameter.binding?.nodeId !== review.prompt.nodeId || parameter.binding?.path !== "inputs." + review.prompt.field);
-  if (review.prompt) config.prompt = { required: false, binding: { target: "comfyui", nodeId: review.prompt.nodeId, path: "inputs." + review.prompt.field } };
-  else delete config.prompt;
+  const config = withPromptBinding(prepared, graph, review.prompt);
   const outputs = review.outputs.map(({ nodeId, field, kind }) => ({ nodeId, field, kind }));
   config.execution = { ...(record(config.execution) ? config.execution : {}), output: outputs[0], outputs };
   config.nodeKind = outputs[0].kind;
   config.primaryCategoryLabel = { image: "图像工具", video: "视频工具", audio: "音频工具", text: "文本工具", file: "其他工具" }[outputs[0].kind];
   config.importBindingReview = structuredClone(review);
-  return { ...prepared, config, analysis: { ...prepared.analysis, outputs: outputs.map(output => ({ ...output,
+  const prompt = review.prompt ? graph[review.prompt.nodeId].inputs[review.prompt.field] : "";
+  return { ...prepared, config, prompt: typeof prompt === "string" ? prompt : "", analysis: { ...prepared.analysis, outputs: outputs.map(output => ({ ...output,
     label: prepared.analysis.outputs.find(candidate => candidate.nodeId === output.nodeId)?.label ?? output.nodeId, needsBinding: false })) } };
 }
 
@@ -80,7 +105,8 @@ export function importReadiness(prepared: PreparedWorkflowImport, liveSchema = f
   return {
     read: prepared.importState.status === "ready" ? "已读取并转换" : "原文件已保留，转换待完成",
     bindings: prepared.importState.status !== "ready" ? "等待转换" : prepared.config.importBindingReview ? "使用已保存的自定义绑定"
-      : prepared.config.prompt ? "提示词已自动绑定；输出按运行结果识别" : "已保留独立文本参数；输出按运行结果识别",
+      : prepared.config.prompt ? "提示词已自动绑定，输出按运行结果识别"
+      : prepared.analysis.prompts.length ? "将各提示词显示为独立输入，输出按运行结果识别" : "输出按运行结果识别",
     execution: liveSchema ? report?.hasBlockingIssues ? "发现待处理的环境或执行兼容问题，详见下方清单" : "已读取当前节点定义；模型、插件运行和生成尚未验证" : "当前云端能力未确认；缓存仅供读取参考",
   };
 }

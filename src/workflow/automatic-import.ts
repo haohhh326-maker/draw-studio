@@ -7,6 +7,7 @@ import { loadImportSchema } from "./import-schema";
 import type { WorkflowImportDiagnostic } from "./import-pending";
 import { withImportEnvironmentCapabilities } from "./import-environment-diagnostics";
 import { discoverOnlineManagerPlugins } from "./manager-online-discovery";
+import type { PublishedWorkflowPrompt } from "./automatic-prompt-binding";
 import {
   collectMissingManagerNodes, repairMissingManagerPlugins,
   type ManagerRepairResult,
@@ -14,7 +15,7 @@ import {
 
 type Progress = (message: string) => void;
 type ImportSchema = Awaited<ReturnType<typeof loadImportSchema>>;
-export type AutomaticImportOptions = { installMissingPlugins?: boolean };
+export type AutomaticImportOptions = { installMissingPlugins?: boolean; publishedPrompt?: PublishedWorkflowPrompt };
 export type AutomaticWorkflowImport = {
   prepared: PreparedWorkflowImport;
   warnings: string[];
@@ -33,7 +34,7 @@ export async function prepareAutomaticWorkflowImport(
   const nativePlatform = isRunningHubNativeConnection(connection);
   const schema: ImportSchema = nativePlatform ? { ...loadedSchema, catalogScope: "platform" } : loadedSchema;
   signal.throwIfAborted();
-  let prepared = await prepareWorkflowImport(source, filename, schema.info, undefined, signal);
+  let prepared = await prepareWorkflowImport(source, filename, schema.info, undefined, signal, options.publishedPrompt);
   signal.throwIfAborted();
 
   // Cached contracts remain useful for parsing during an outage, but cannot
@@ -68,7 +69,7 @@ export async function prepareAutomaticWorkflowImport(
   const info = Object.keys(manager.objectInfo).length ? manager.objectInfo : schema.info;
   // Reparse exactly the original file. Installed node contracts may now recover
   // widget names/order; never construct a replacement workflow or lose metadata.
-  prepared = await prepareWorkflowImport(source, filename, info, undefined, signal);
+  prepared = await prepareWorkflowImport(source, filename, info, undefined, signal, options.publishedPrompt);
   signal.throwIfAborted();
   return finish(prepared, { ...schema, info }, manager);
 }

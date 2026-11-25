@@ -5,8 +5,10 @@ test("RunningHub workflow settings read and add a remote reference through the i
   const workflowId = "2115791287499706370";
   const graph = {
     "1": { class_type: "LoadImage", inputs: { image: "sample.png" } },
-    "2": { class_type: "CustomEdit", inputs: { image: ["1", 0], prompt: "author sample", seed: 123 } },
+    "2": { class_type: "CustomEdit", inputs: { image: ["1", 0], prompt: "author sample", seed: 123, scene: ["镜头", 0], direction: ["镜头.配置", 0] } },
     "3": { class_type: "SaveImage", inputs: { images: ["2", 0], filename_prefix: "authored" } },
+    "镜头": { class_type: "PromptText", inputs: { "配置.prompt": "original scene" } },
+    "镜头.配置": { class_type: "PromptText", inputs: { prompt: "original direction" } },
   };
   const sourceRequests: string[] = [];
   const reader = await readAIFisherWorkflow({ environment: "runninghub-workflow", remote: {
@@ -41,8 +43,7 @@ test("RunningHub workflow settings read and add a remote reference through the i
   await page.getByRole("button", { name: "新建项目", exact: true }).click();
   await page.getByLabel("项目名称").fill("工作流内嵌添加验证");
   await page.getByRole("button", { name: "创建并打开" }).click();
-  await page.getByRole("button", { name: "远程连接", exact: true }).click();
-  await page.getByRole("dialog", { name: "选择算力", exact: true }).getByRole("button", { name: "算力设置", exact: true }).click();
+  await page.getByRole("button", { name: "设置", exact: true }).click();
   const settings = page.getByRole("dialog", { name: "算力设置", exact: true });
   await settings.getByRole("tab", { name: "RunningHub 工作流", exact: true }).click();
   const editor = settings.locator(".rh-remote-inline");
@@ -60,6 +61,18 @@ test("RunningHub workflow settings read and add a remote reference through the i
   await expect(editor.locator(".rh-remote-list article")).toHaveCount(1);
   await expect(editor.locator(".rh-remote-list article")).toContainText(workflowId);
   expect(reads).toBe(1);
+  const prompts = editor.getByRole("combobox", { name: "主提示词", exact: true });
+  const scene = JSON.stringify(["镜头", "配置.prompt"]);
+  const direction = JSON.stringify(["镜头.配置", "prompt"]);
+  await expect(prompts.getByRole("option", { name: /镜头 \/ 配置\.prompt/ })).toHaveAttribute("value", scene);
+  await expect(prompts.getByRole("option", { name: /镜头\.配置 \/ prompt/ })).toHaveAttribute("value", direction);
+  await prompts.selectOption(direction);
+  await editor.getByRole("button", { name: "保存调整", exact: true }).click();
+  await expect(editor.getByRole("status")).toContainText("已添加远端工作流引用");
+  await editor.getByRole("button", { name: /^重新读取：/ }).click();
+  await expect(editor.getByRole("status")).toContainText("已添加远端工作流引用");
+  await expect(prompts).toHaveValue(direction);
+  expect(reads).toBe(2);
   expect(unexpectedCalls).toEqual([]);
   const saved = await page.evaluate(async workflowId => {
     const db = await new Promise<IDBDatabase>((resolve, reject) => {
@@ -75,7 +88,9 @@ test("RunningHub workflow settings read and add a remote reference through the i
     db.close();
     const workflow = workflows.find(item => item.runninghub?.workflowId === workflowId);
     return { kind: workflow.runninghub.kind, billingMode: workflow.runninghub.billingMode, includeWorkflowJson: workflow.runninghub.includeWorkflowJson,
-      directory: workflow.directory ?? null, library: workflow.library ?? null, template: workflow.template };
+      directory: workflow.directory ?? null, library: workflow.library ?? null, template: workflow.template,
+      promptMapping: workflow.mapping.filter((target: { semantic: string }) => target.semantic === "prompt") };
   }, workflowId);
-  expect(saved).toEqual({ kind: "workflow", billingMode: "consumer", includeWorkflowJson: false, directory: null, library: null, template: graph });
+  expect(saved).toEqual({ kind: "workflow", billingMode: "consumer", includeWorkflowJson: false, directory: null, library: null,
+    template: graph, promptMapping: [{ semantic: "prompt", nodeId: "镜头.配置", field: "prompt" }] });
 });

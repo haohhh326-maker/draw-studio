@@ -2,7 +2,7 @@ import type { ApiWorkflow, WorkflowDefinition } from "../types";
 import type { ImportAnalysis, ImportMediaBinding, ImportOutputBinding } from "../workflow/import-analyzer";
 import { savedOutputContracts } from "../workflow/output-contracts";
 
-const targetKey = (nodeId: string, field: string) => JSON.stringify([nodeId, field]);
+export const runningHubFieldKey = (nodeId: string, field: string) => JSON.stringify([nodeId, field]);
 const finalMediaContract = (classType: string) => {
   const contract = savedOutputContracts[classType];
   return classType !== "PreviewImage" && contract?.kind !== "text" ? contract : undefined;
@@ -27,19 +27,19 @@ function previousMediaInputs(saved: WorkflowDefinition, app: boolean) {
   for (const field of app ? saved.runninghub?.executionContract?.publicSchema?.fields ?? [] : []) {
     const type = field.type.toLowerCase(), kind = type === "mask" ? "image" : type;
     if (!field.secret && ["image", "video", "audio"].includes(kind)) {
-      const key = targetKey(field.nodeId, field.fieldName);
+      const key = runningHubFieldKey(field.nodeId, field.fieldName);
       inputs.set(key, { kind: kind as ImportMediaBinding["kind"], required: field.required });
       publicMedia.add(key);
     }
   }
   for (const field of saved.runninghub?.mediaInputs ?? []) {
-    const key = targetKey(field.nodeId, field.field);
+    const key = runningHubFieldKey(field.nodeId, field.field);
     inputs.set(key, { ...inputs.get(key), required: field.required });
   }
   for (const slot of saved.inputSlots ?? []) {
     const target = saved.mapping.find(mapping => mapping.semantic === slot.semantic);
     if (!target) continue;
-    const key = targetKey(target.nodeId, target.field), previous = inputs.get(key);
+    const key = runningHubFieldKey(target.nodeId, target.field), previous = inputs.get(key);
     inputs.set(key, { kind: slot.kind, required: slot.required, ...previous });
   }
   return { inputs, publicMedia };
@@ -49,7 +49,7 @@ function previousMediaInputs(saved: WorkflowDefinition, app: boolean) {
 export function reviewRunningHubImportBindings(graph: ApiWorkflow, analysis: ImportAnalysis, saved?: WorkflowDefinition) {
   const warnings: string[] = [];
   const defaults = {
-    promptKey: analysis.prompts[0] ? analysis.prompts[0].nodeId + "." + analysis.prompts[0].field : "",
+    promptKey: analysis.prompts[0] ? runningHubFieldKey(analysis.prompts[0].nodeId, analysis.prompts[0].field) : "",
     media: analysis.inputs.map(input => ({ ...input })) as ImportMediaBinding[],
     outputs: analysis.outputs.map(({ nodeId, field, kind }) => ({ nodeId, field, kind })) as ImportOutputBinding[],
   };
@@ -66,16 +66,16 @@ export function reviewRunningHubImportBindings(graph: ApiWorkflow, analysis: Imp
     && typeof graph[mainPrompt.nodeId].inputs[mainPrompt.field] === "string" ? mainPrompt : undefined;
   const promptKey = prompt && validInput(prompt.nodeId, prompt.field) && analysis.prompts.some(field => field.nodeId === prompt.nodeId && field.field === prompt.field)
     && typeof graph[prompt.nodeId].inputs[prompt.field] === "string"
-    ? prompt.nodeId + "." + prompt.field : upgradedPrompt ? upgradedPrompt.nodeId + "." + upgradedPrompt.field : "";
+    ? runningHubFieldKey(prompt.nodeId, prompt.field) : upgradedPrompt ? runningHubFieldKey(upgradedPrompt.nodeId, upgradedPrompt.field) : "";
   if (prompt && !promptKey) warnings.push("原主提示词的节点类型或字段已变化，请重新选择主提示词。");
   if (upgradedPrompt) warnings.push("已按新应用输入声明选中主提示词，请确认更新后的提示词绑定。");
   const media: ImportMediaBinding[] = [];
   const previous = previousMediaInputs(saved, app), invalidTargets = new Set<string>();
-  const freshInputs = new Map(analysis.inputs.map(input => [targetKey(input.nodeId, input.field), input]));
+  const freshInputs = new Map(analysis.inputs.map(input => [runningHubFieldKey(input.nodeId, input.field), input]));
   let mediaChanged = false;
   for (const slot of saved.inputSlots ?? []) {
     const target = saved.mapping.find(mapping => mapping.semantic === slot.semantic);
-    const key = target && targetKey(target.nodeId, target.field), declared = key ? freshInputs.get(key) : undefined;
+    const key = target && runningHubFieldKey(target.nodeId, target.field), declared = key ? freshInputs.get(key) : undefined;
     if (!target || !validInput(target.nodeId, target.field) || declared && declared.kind !== slot.kind ||
       app && key && previous.publicMedia.has(key) && !declared) {
       mediaChanged = true;
@@ -91,8 +91,8 @@ export function reviewRunningHubImportBindings(graph: ApiWorkflow, analysis: Imp
       required: declaredRequired !== undefined ? declaredRequired : slot.required });
   }
   for (const input of analysis.inputs) {
-    const key = targetKey(input.nodeId, input.field), before = previous.inputs.get(key);
-    if (media.some(binding => targetKey(binding.nodeId, binding.field) === key)) continue;
+    const key = runningHubFieldKey(input.nodeId, input.field), before = previous.inputs.get(key);
+    if (media.some(binding => runningHubFieldKey(binding.nodeId, binding.field) === key)) continue;
     if (!before || before.kind && before.kind !== input.kind || invalidTargets.has(key) ||
       app && before.required === false && input.required === true) {
       media.push({ ...input });

@@ -1,8 +1,9 @@
 import { describe, expect, it } from "vitest";
-import type { ApiWorkflow } from "../src/types";
+import type { ApiWorkflow, CanvasNode } from "../src/types";
 import type { ImportAnalysis } from "../src/workflow/import-analyzer";
 import { runningHubBindingFieldChoices } from "../src/runninghub/RunningHubWorkflowDialog";
 import {
+  prepareRunningHubApp,
   prepareRunningHubWorkflow,
   prepareRunningHubWorkflowCandidates,
 } from "../src/runninghub/workflows";
@@ -10,7 +11,10 @@ import {
   runningHubCanvasParameterKeys,
   runningHubSelectableParameters,
 } from "../src/runninghub/source-summary";
-import { withRunningHubWorkflowReader } from "./runninghub-test-reader";
+import { reviewRunningHubImportBindings, runningHubFieldKey } from "../src/runninghub/import-review";
+import { analyzeRunningHubUpstream } from "../src/runninghub/upstream-reader";
+import { buildWorkflow } from "../src/workflow-adapter/adapter";
+import { withRunningHubAppReader, withRunningHubWorkflowReader } from "./runninghub-test-reader";
 
 const source: ApiWorkflow = {
   prompt: {
@@ -63,11 +67,40 @@ const identity = (field: { nodeId: string; field: string }) =>
   field.nodeId + "." + field.field;
 
 describe("RunningHub ordinary and custom binding choices", () => {
+  it("keeps both colliding published AI app text options selectable when opening and reviewing a saved app", async () => {
+    const pairs = [["scene", "style.prompt", "甲"], ["scene.style", "prompt", "乙"]] as const;
+    const name = "双提示词应用";
+    const app = await withRunningHubAppReader({
+      name, apiVersion: "v2",
+      nodeInfoList: pairs.map(([nodeId, fieldName, fieldValue]) => ({ nodeId, fieldName, fieldValue, fieldType: "STRING" })),
+    });
+    const graph = app.reader.workflow!;
+    const original = structuredClone(graph);
+    const analysis = analyzeRunningHubUpstream(app.reader);
+    const fresh = reviewRunningHubImportBindings(graph, analysis);
+    const choices = runningHubBindingFieldChoices(graph, analysis, fresh.promptKey, [], new Set()).promptFields;
+    const keys = pairs.map(([nodeId, field]) => JSON.stringify([nodeId, field]));
+    expect(choices.map(field => runningHubFieldKey(field.nodeId, field.field)).sort()).toEqual([...keys].sort());
+    expect(keys).toContain(fresh.promptKey);
+    for (const [nodeId, field] of pairs) {
+      const promptKey = JSON.stringify([nodeId, field]);
+      const { workflow } = prepareRunningHubApp(app, { workflowId: "123", baseUrl: "https://www.runninghub.cn",
+        name, promptKey, reader: app.reader });
+      expect(workflow.mapping.filter(item => item.semantic === "prompt")).toEqual([{ semantic: "prompt", nodeId, field }]);
+      expect(reviewRunningHubImportBindings(graph, analysis, workflow).promptKey).toBe(promptKey);
+      const canvas = { data: { generation: { workflowId: workflow.id, prompt: "画布提示词", negativePrompt: "", params: {}, taskId: null } } } as CanvasNode;
+      const expected = structuredClone(original);
+      expected[nodeId].inputs[field] = "画布提示词";
+      expect(buildWorkflow(workflow, canvas, [], {}).workflow).toEqual(expected);
+    }
+    expect(graph).toEqual(original);
+  });
+
   it("limits ordinary choices to recognized prompt/media ports without losing nullable declared inputs", () => {
     const choices = runningHubBindingFieldChoices(
       source,
       analysis,
-      "prompt.prompt",
+      JSON.stringify(["prompt", "prompt"]),
       [],
       credentials,
     );
@@ -82,7 +115,7 @@ describe("RunningHub ordinary and custom binding choices", () => {
     const choices = runningHubBindingFieldChoices(
       source,
       analysis,
-      "prompt.text",
+      JSON.stringify(["prompt", "text"]),
       [
         {
           nodeId: "image",

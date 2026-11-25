@@ -1,8 +1,9 @@
 import { randomUUID } from "node:crypto";
-import { request as httpsRequest } from "node:https";
 import fs from "node:fs/promises";
 import path from "node:path";
 import type { AutoDLAcquireRequest, AutoDLLease, AutoDLPowerPhase, AutoDLPowerStatus, AutoDLSettingsInput } from "../src/autodl/types";
+import { AutoDLExtensionBroker, AutoDLBridgeError, formatAutoDLDiagnostics } from "./autodl-extension-broker";
+import { AutoDLBrowserService } from "./autodl-browser-service";
 
 export class AutoDLPowerError extends Error {
   constructor(message: string, public status = 400) { super(message); }
@@ -11,13 +12,16 @@ type Credentials = { apiToken: string; instanceUuid: string };
 type Settings = Credentials & { enabled: boolean; endpoint: string };
 export interface AutoDLPlatform {
   status(credentials: Credentials): Promise<string>;
+  checkStartup?(credentials: Credentials): Promise<string>;
   powerOn(credentials: Credentials): Promise<void>;
   powerOff(credentials: Credentials): Promise<void>;
+  revision?(): number;
 }
-type SavedLease = AutoDLLease & { endpoint: string; taskId: string; attemptId: string; expiresAt: number; recovered?: boolean };
+type SavedLease = AutoDLLease & { endpoint: string; taskId: string; attemptId: string; expiresAt: number; recovered?: boolean; message?: string };
 type SavedState = { version: 1; settings: Settings; leases: SavedLease[]; pendingStop: boolean; phase: AutoDLPowerPhase;
-  epoch?: number; powerOwned?: boolean; startRequestedAt?: number; waitStartedAt?: number; error?: string };
-type PowerOperation = { settings: Settings; epoch: number };
+  epoch?: number; powerOwned?: boolean; startRequestedAt?: number; waitStartedAt?: number; bootUncertainUntil?: number; bootObserved?: boolean; error?: string;
+  bootVerification?: string; capacityRetryAt?: number; capacityRetryCount?: number };
+type PowerOperation = { settings: Settings; epoch: number; accountRevision: number };
 export type AutoDLPowerServiceOptions = {
   platform?: AutoDLPlatform;
   now?: () => number;
@@ -25,11 +29,19 @@ export type AutoDLPowerServiceOptions = {
   leaseTtlMs?: number;
   startupTimeoutMs?: number;
   automaticTimer?: boolean;
+  broker?: AutoDLExtensionBroker;
+  browserAccount?: boolean;
+  bootSettleMs?: number;
 };
 const initialState = (): SavedState => ({ version: 1, settings: { enabled: false, endpoint: "", instanceUuid: "", apiToken: "" }, leases: [], pendingStop: false, phase: "disabled" });
 const active = (lease: SavedLease) => lease.phase === "starting" || lease.phase === "ready";
-const offStates = new Set(["shutdown", "shutdown_by_starting_error", "shutdown_by_running_error", "migrate_failed"]);
-const publicLease = ({ leaseId, instanceUuid, phase, error }: SavedLease): AutoDLLease => ({ leaseId, instanceUuid, phase, ...(error ? { error } : {}) });
+const bootableOffStates = new Set(["shutdown", "shutdown_by_starting_error", "shutdown_by_running_error"]);
+const offStates = new Set([...bootableOffStates, "migrate_failed"]);
+const isStartupBlocker = (error: unknown): error is AutoDLBridgeError =>
+  error instanceof AutoDLBridgeError && (error.code === "INSUFFICIENT_BALANCE" || error.code === "INSTANCE_EXPIRED");
+const bootVerificationMessage = "正在核对 AutoDL 开机状态，等待平台更新。";
+const publicLease = ({ leaseId, instanceUuid, phase, error, message }: SavedLease): AutoDLLease => ({ leaseId, instanceUuid, phase, ...(error ? { error } : {}), ...(message ? { message } : {}) });
+const clearCapacityRetry = (state: SavedState) => { state.capacityRetryAt = undefined; state.capacityRetryCount = undefined; for (const lease of state.leases) lease.message = undefined; };
 function record(value: unknown): value is Record<string, unknown> { return !!value && typeof value === "object" && !Array.isArray(value); }
 function text(value: unknown, name: string, maximum = 2048): string {
   if (typeof value !== "string" || value.length > maximum || /[\x00-\x1f\x7f]/.test(value)) throw new AutoDLPowerError(name + "格式无效。");
@@ -62,53 +74,25 @@ function settingsInput(input: unknown, previous: Settings): Settings {
   const instanceUuid = text(input.instanceUuid, "应用实例 ID", 160);
   if (instanceUuid && !/^pro-[A-Za-z0-9_-]+$/.test(instanceUuid)) throw new AutoDLPowerError("请填写 AutoDL.Art 应用实例 ID。");
   const source = text(input.endpoint, "ComfyUI 地址");
-  const apiToken = input.apiToken === undefined ? previous.apiToken : text(input.apiToken, "开发者 Token", 4096) || previous.apiToken;
-  if (input.enabled && (!source || !instanceUuid || !apiToken)) throw new AutoDLPowerError("启用前请填写 ComfyUI 地址、应用实例 ID 和开发者 Token。");
-  return { enabled: input.enabled, endpoint: source ? endpoint(source) : "", instanceUuid, apiToken };
+  if (input.apiToken !== undefined) text(input.apiToken, "旧版凭据", 4096);
+  if (input.enabled && (!source || !instanceUuid)) throw new AutoDLPowerError("启用前请填写 ComfyUI 地址和应用实例 ID，并连接 AutoDL.Art 账号。");
+  const normalized = source ? endpoint(source) : "";
+  const address = normalized ? new URL(normalized) : undefined;
+  const official = address?.hostname.endsWith(".seetacloud.com") ? address.hostname.split(".")[0].match(/^u\d+-([a-f0-9]+)$/) : undefined;
+  if (official && instanceUuid && instanceUuid !== "pro-" + official[1]) throw new AutoDLPowerError("AutoDL 官方服务地址与应用实例 ID 不一致，请选择对应实例。");
+  return { enabled: input.enabled, endpoint: normalized, instanceUuid, apiToken: "" };
 }
 
-/** These are the documented application-instance APIs, never the instance-release API. */
-export function createAutoDLPlatform(requester: typeof httpsRequest = httpsRequest): AutoDLPlatform {
-  async function call(operation: "status" | "power_on" | "power_off", credentials: Credentials): Promise<unknown> {
-    const body = Buffer.from(JSON.stringify({ instance_uuid: credentials.instanceUuid, ...(operation === "power_on" ? { payload: "gpu" } : {}) }));
-    return new Promise((resolve, reject) => {
-      const request = requester(new URL("https://www.autodl.art/api/v1/adl_dev/dev/instance/pro/" + operation), {
-        method: operation === "status" ? "GET" : "POST",
-        headers: { Authorization: credentials.apiToken, Accept: "application/json", "Content-Type": "application/json", "Content-Length": body.length },
-      }, response => {
-        const chunks: Buffer[] = [];
-        let size = 0;
-        response.on("data", chunk => {
-          size += chunk.length;
-          if (size > 1024 * 1024) { response.destroy(new AutoDLPowerError("AutoDL 状态响应过大。", 502)); return; }
-          chunks.push(Buffer.from(chunk));
-        });
-        response.once("error", reject);
-        response.once("end", () => {
-          let packet: unknown;
-          try { packet = JSON.parse(Buffer.concat(chunks).toString("utf8")); }
-          catch { reject(new AutoDLPowerError("AutoDL 没有返回有效的状态数据。", 502)); return; }
-          if (response.statusCode !== 200 || !record(packet) || packet.code !== "Success") {
-            const message = record(packet) && typeof packet.msg === "string" && packet.msg ? packet.msg : "AutoDL 请求未成功，请检查开发者 Token 和应用实例 ID。";
-            reject(new AutoDLPowerError(message.replaceAll(credentials.apiToken, "[已隐藏]"), 502)); return;
-          }
-          resolve(packet.data);
-        });
-      });
-      request.once("error", reject);
-      request.setTimeout(30_000, () => request.destroy(new AutoDLPowerError("AutoDL 状态请求超时。", 502)));
-      // Node's HTTPS transport supports the official status endpoint's GET JSON body.
-      request.end(body);
-    });
-  }
+/** The extension uses the user's existing official page; website credentials never enter this process. */
+export function createAutoDLPlatform(broker: Pick<AutoDLExtensionBroker, "call" | "revision">): AutoDLPlatform {
   return {
     async status(credentials) {
-      const result = await call("status", credentials);
-      if (typeof result !== "string" || !result.trim()) throw new AutoDLPowerError("AutoDL 实例状态无效。", 502);
-      return result;
+      const result = await broker.call("status", credentials.instanceUuid) as { status: string };
+      return result.status;
     },
-    async powerOn(credentials) { await call("power_on", credentials); },
-    async powerOff(credentials) { await call("power_off", credentials); },
+    async powerOn(credentials) { await broker.call("power-on", credentials.instanceUuid); },
+    async powerOff(credentials) { await broker.call("power-off", credentials.instanceUuid); },
+    revision: () => broker.revision(),
   };
 }
 
@@ -128,8 +112,13 @@ export class AutoDLPowerService {
   private readonly leaseTtlMs: number;
   private readonly startupTimeoutMs: number;
   private readonly file: string;
+  private readonly broker: AutoDLExtensionBroker;
+  private readonly browser?: AutoDLBrowserService;
+  private readonly legacyTokens = new Set<string>();
   constructor(root: string, private readonly options: AutoDLPowerServiceOptions = {}) {
-    this.platform = options.platform ?? createAutoDLPlatform();
+    this.broker = options.broker ?? new AutoDLExtensionBroker(root);
+    this.browser = options.browserAccount ? new AutoDLBrowserService(root) : undefined;
+    this.platform = options.platform ?? this.browser ?? createAutoDLPlatform(this.broker);
     this.now = options.now ?? Date.now;
     this.retryMs = options.retryMs ?? 2_000;
     this.leaseTtlMs = options.leaseTtlMs ?? 180_000;
@@ -138,9 +127,9 @@ export class AutoDLPowerService {
   }
   safeError(error: unknown, requestToken?: string): AutoDLPowerError {
     let message = error instanceof Error ? error.message : "AutoDL 电源管理未能完成此操作。";
-    for (const token of new Set([this.state.settings.apiToken, requestToken]))
+    for (const token of new Set([...this.legacyTokens, this.state.settings.apiToken, requestToken]))
       if (token) for (const value of new Set([token, encodeURIComponent(token)])) message = message.replaceAll(value, "[已隐藏]");
-    return new AutoDLPowerError(message.slice(0, 500), error instanceof AutoDLPowerError ? error.status : 500);
+    return new AutoDLPowerError(message.slice(0, 500), error instanceof AutoDLPowerError || error instanceof AutoDLBridgeError ? error.status : 500);
   }
   private initialize(): Promise<void> {
     if (this.disposed) return Promise.reject(new AutoDLPowerError("AutoDL 本机服务已关闭。", 503));
@@ -167,6 +156,12 @@ export class AutoDLPowerService {
     if (!record(parsed) || parsed.version !== 1 || !record(parsed.settings) || !Array.isArray(parsed.leases) || typeof parsed.pendingStop !== "boolean")
       throw new AutoDLPowerError("本机 AutoDL 状态文件格式无效，请保留原文件。", 500);
     const stored = parsed as unknown as SavedState;
+    if (stored.bootVerification !== undefined && (typeof stored.bootVerification !== "string" || stored.bootVerification.length > 100))
+      throw new AutoDLPowerError("本机 AutoDL 开机核对记录无效，请保留原文件。", 500);
+    if (stored.capacityRetryAt !== undefined && (!Number.isSafeInteger(stored.capacityRetryAt) || stored.capacityRetryAt < 0) ||
+      stored.capacityRetryCount !== undefined && (!Number.isInteger(stored.capacityRetryCount) || stored.capacityRetryCount < 0 || stored.capacityRetryCount > 2))
+      throw new AutoDLPowerError("本机 AutoDL 库存重试记录无效，请保留原文件。", 500);
+    if (typeof stored.settings.apiToken === "string" && stored.settings.apiToken) this.legacyTokens.add(stored.settings.apiToken);
     const settings = settingsInput(stored.settings, initialState().settings);
     const known = new Set<string>();
     for (const lease of stored.leases) {
@@ -181,6 +176,7 @@ export class AutoDLPowerService {
       phase: stored.pendingStop ? "stopping" : stored.leases.some(active) ? "error" : settings.enabled ? "unknown" : "disabled" };
     if (this.state.powerOwned && !this.state.leases.some(active)) { this.state.pendingStop = true; this.state.phase = "stopping"; }
     if (stored.leases.some(active)) this.state.error = "检测到应用中断前的任务，正在等待恢复心跳；不会立即关闭仍可能运行的实例。";
+    if (stored.settings.apiToken) await this.lock(() => this.update(() => {}));
     await this.expireLeases();
   }
   private lock<T>(action: () => Promise<T>): Promise<T> {
@@ -202,11 +198,11 @@ export class AutoDLPowerService {
     } finally { await fs.rm(temporary, { force: true }); }
   }
   private requireConfigured(settings = this.state.settings) {
-    if (!settings.apiToken || !settings.instanceUuid || !settings.endpoint) throw new AutoDLPowerError("请先保存 AutoDL 开关机设置。");
+    if (!settings.instanceUuid || !settings.endpoint) throw new AutoDLPowerError("请先保存 AutoDL 开关机设置并连接 AutoDL.Art 账号。");
   }
-  private operation(): PowerOperation { return { settings: { ...this.state.settings }, epoch: this.state.epoch ?? 0 }; }
+  private operation(): PowerOperation { return { settings: { ...this.state.settings }, epoch: this.state.epoch ?? 0, accountRevision: this.platform.revision?.() ?? 0 }; }
   private isCurrent(operation: PowerOperation): boolean {
-    return operation.epoch === (this.state.epoch ?? 0) && sameBinding(this.state.settings, operation.settings) && operation.settings.apiToken === this.state.settings.apiToken;
+    return operation.epoch === (this.state.epoch ?? 0) && sameBinding(this.state.settings, operation.settings) && operation.accountRevision === (this.platform.revision?.() ?? 0);
   }
   async status(): Promise<AutoDLPowerStatus> {
     await this.initialize();
@@ -215,13 +211,15 @@ export class AutoDLPowerService {
     const error = this.transientError ?? state.error;
     const message = state.pendingStop ? "正在关闭 AutoDL 实例，等待平台确认关机。" : count && state.leases.some(lease => active(lease) && lease.recovered)
       ? "等待恢复应用中断前的任务；过期租约将进入关机清理。" : phase === "ready" ? "AutoDL 实例已开机。"
-      : phase === "starting" ? "正在启动 AutoDL 实例。" : phase === "off" ? "AutoDL 实例已关机。" : phase === "disabled" ? "未启用 AutoDL 自动开关机。"
+      : phase === "starting" ? state.leases.find(lease => active(lease) && lease.message)?.message ?? "正在启动 AutoDL 实例。" : phase === "off" ? "AutoDL 实例已关机。" : phase === "disabled" ? "未启用 AutoDL 自动开关机。"
         : phase === "unknown" ? "尚未查询 AutoDL 实例状态。" : "AutoDL 电源管理需要处理。";
-    return { settings: { enabled: state.settings.enabled, endpoint: state.settings.endpoint, instanceUuid: state.settings.instanceUuid, tokenConfigured: !!state.settings.apiToken },
+    return { settings: { enabled: state.settings.enabled, endpoint: state.settings.endpoint, instanceUuid: state.settings.instanceUuid, tokenConfigured: false },
       phase, activeTasks: count, pendingStop: state.pendingStop, message, ...(error ? { error: this.safeError(new Error(error)).message } : {}) };
   }
   async saveSettings(input: AutoDLSettingsInput): Promise<AutoDLPowerStatus> {
     await this.initialize();
+    const legacy = input as unknown as Record<string, unknown>;
+    if (record(legacy) && typeof legacy.apiToken === "string" && legacy.apiToken) this.legacyTokens.add(legacy.apiToken);
     await this.lock(async () => {
       const next = settingsInput(input, this.state.settings), previous = this.state.settings;
       if ((this.state.pendingStop || this.state.leases.some(active)) && (next.endpoint !== previous.endpoint || next.instanceUuid !== previous.instanceUuid))
@@ -231,12 +229,45 @@ export class AutoDLPowerService {
       await this.update(state => {
         if (!sameBinding(previous, next) || next.apiToken !== previous.apiToken || next.enabled !== previous.enabled) bumpEpoch(state);
         state.settings = next; if (!state.leases.some(active) && !state.pendingStop) {
-        state.phase = next.enabled ? "unknown" : "disabled"; state.error = undefined; state.powerOwned = false; state.startRequestedAt = undefined; state.waitStartedAt = undefined;
+        state.phase = next.enabled ? "unknown" : "disabled"; state.error = undefined; state.powerOwned = false; state.startRequestedAt = undefined; state.waitStartedAt = undefined; state.bootUncertainUntil = undefined; state.bootObserved = undefined; state.bootVerification = undefined; clearCapacityRetry(state);
       } });
     });
     if (this.state.pendingStop) { await this.start(); void this.kick(); }
     return this.status();
   }
+  get usesIndependentBrowser() { return Boolean(this.browser); }
+  session() { return this.browser?.session() ?? this.broker.session(); }
+  instances() { return this.browser?.instances() ?? this.broker.instances(); }
+  async openAccount() {
+    const browser = this.browser;
+    if (!browser) throw new AutoDLPowerError("此版本未启用 AutoDL 官网窗口。", 404);
+    await this.initialize();
+    return this.lock(async () => {
+      if (this.state.leases.some(lease => active(lease) && !lease.recovered))
+        throw new AutoDLPowerError("当前有 AutoDL 任务运行，请等待任务结束后再打开登录窗口。", 409);
+      return browser.openAccount();
+    });
+  }
+  pairCode() { return this.broker.pairCode(); }
+  private bridgeInUse() { return this.state.pendingStop || this.state.powerOwned || this.state.leases.some(active); }
+  async bridgePair(value: unknown) {
+    await this.initialize();
+    return this.lock(async () => {
+      if (this.bridgeInUse() && this.broker.hasOnlinePeer())
+        throw new AutoDLPowerError("当前浏览器正在为任务管理 AutoDL，请在任务结束并确认关机后再更换。", 409);
+      return this.broker.pair(value);
+    });
+  }
+  bridgeVerify(value: unknown) { return this.broker.verify(value); }
+  async bridgeDisconnect(value: unknown) {
+    await this.initialize();
+    return this.lock(async () => {
+      if (this.bridgeInUse()) throw new AutoDLPowerError("当前画布有未结束的 AutoDL 任务或待确认关机。", 409);
+      return this.broker.disconnect(value);
+    });
+  }
+  bridgePoll(value: unknown, signal?: AbortSignal) { return this.broker.poll(value, signal); }
+  bridgeResult(value: unknown) { return this.broker.result(value); }
   async check(): Promise<AutoDLPowerStatus> {
     await this.initialize();
     const operation = this.operation(), settings = operation.settings;
@@ -244,6 +275,17 @@ export class AutoDLPowerService {
     let observed: string;
     try { observed = await this.platform.status(settings); }
     catch (error) { throw this.safeError(error, settings.apiToken); }
+    let startupMessage: string | undefined;
+    if (bootableOffStates.has(observed) && this.platform.checkStartup) {
+      try {
+        observed = await this.platform.checkStartup(settings);
+        if (bootableOffStates.has(observed)) startupMessage = "AutoDL 实例已关机，开机预检通过。";
+      }
+      catch (error) {
+        startupMessage = isStartupBlocker(error) ? this.safeError(error, settings.apiToken).message
+          : "AutoDL 实例已关机，暂时无法核对开机条件。";
+      }
+    }
     await this.lock(async () => {
       if (!this.isCurrent(operation)) return;
       await this.update(state => {
@@ -251,7 +293,10 @@ export class AutoDLPowerService {
         if (!state.pendingStop) state.error = undefined;
       });
     });
-    return this.status();
+    const status = await this.status();
+    return startupMessage && this.isCurrent(operation) && status.phase === "off"
+      ? { ...status, message: startupMessage }
+      : status;
   }
   async acquire(input: AutoDLAcquireRequest): Promise<AutoDLLease> {
     await this.start();
@@ -259,7 +304,9 @@ export class AutoDLPowerService {
     const lease = await this.lock(async () => {
       const settings = this.state.settings;
       this.requireConfigured();
-      if (!settings.enabled || settings.endpoint !== source || settings.instanceUuid !== instanceUuid) throw new AutoDLPowerError("AutoDL 任务与保存的实例绑定不匹配。", 409);
+      if (!settings.enabled) throw new AutoDLPowerError("请在算力设置 → 云端 ComfyUI 中启用 AutoDL 自动开关机并保存。", 409);
+      if (settings.endpoint !== source || settings.instanceUuid !== instanceUuid)
+        throw new AutoDLPowerError("AutoDL 任务与保存的实例绑定不匹配，请在算力设置中校验当前连接。", 409);
       const existing = this.state.leases.find(item => sameAttempt(item, normalized));
       if (existing && !active(existing)) return publicLease(existing);
       let id = existing?.leaseId;
@@ -280,7 +327,9 @@ export class AutoDLPowerService {
           state.leases.push({ leaseId: id, instanceUuid, endpoint: source, taskId, attemptId, expiresAt: this.now() + this.leaseTtlMs,
             phase: reuseReady ? "ready" : "starting" });
         }
-        if (!hadActiveLease) { bumpEpoch(state); if (!state.pendingStop) state.waitStartedAt = this.now(); }
+        if (!hadActiveLease) { bumpEpoch(state); clearCapacityRetry(state); if (!state.pendingStop) state.waitStartedAt = this.now(); }
+        else if (state.capacityRetryAt !== undefined) state.leases.find(item => item.leaseId === id)!.message = state.leases.find(item => item.message)?.message;
+        else if (state.bootVerification !== undefined) state.leases.find(item => item.leaseId === id)!.message = bootVerificationMessage;
         if (!state.pendingStop && !reuseReady) state.phase = "starting";
         if (state.waitStartedAt === undefined && state.phase !== "ready") state.waitStartedAt = this.now();
         state.error = undefined;
@@ -323,9 +372,9 @@ export class AutoDLPowerService {
           state.leases.push({ ...attempt!, leaseId: randomUUID(), phase: "released", expiresAt: this.now() });
           return;
         }
-        state.leases.find(item => item.leaseId === lease.leaseId)!.phase = "released";
+        const released = state.leases.find(item => item.leaseId === lease.leaseId)!; released.phase = "released"; released.message = undefined;
         if (!state.leases.some(active)) {
-          bumpEpoch(state);
+          bumpEpoch(state); clearCapacityRetry(state);
           if (state.powerOwned) { state.pendingStop = true; state.phase = "stopping"; }
           else if (!state.pendingStop) { state.phase = "unknown"; state.waitStartedAt = undefined; }
         }
@@ -342,9 +391,9 @@ export class AutoDLPowerService {
   private async expireInLock() {
     if (!this.state.leases.some(lease => active(lease) && lease.expiresAt <= this.now())) return;
     await this.update(state => {
-      for (const lease of state.leases) if (active(lease) && lease.expiresAt <= this.now()) { lease.phase = "failed"; lease.error = "任务心跳中断，租约已结束。"; }
+      for (const lease of state.leases) if (active(lease) && lease.expiresAt <= this.now()) { lease.phase = "failed"; lease.error = "任务心跳中断，租约已结束。"; lease.message = undefined; }
       if (!state.leases.some(active)) {
-        bumpEpoch(state);
+        bumpEpoch(state); clearCapacityRetry(state);
         if (state.powerOwned) { state.pendingStop = true; state.phase = "stopping"; }
         else if (!state.pendingStop) { state.phase = "error"; state.waitStartedAt = undefined; }
       }
@@ -376,53 +425,123 @@ export class AutoDLPowerService {
     const accepted = await this.lock(async () => {
       if (!this.isCurrent(operation) || !this.state.pendingStop) return false;
       await this.update(state => {
-      if (observed !== undefined && offStates.has(observed)) {
-        state.pendingStop = false; state.phase = "off"; state.powerOwned = false; state.startRequestedAt = undefined; state.waitStartedAt = undefined; state.error = undefined;
+      if (observed === "starting" || observed === "running" || observed !== undefined && offStates.has(observed) && observed !== "shutdown") {
+        state.bootObserved = true; state.bootUncertainUntil = undefined;
+      }
+      const bootSettled = state.bootObserved || state.bootUncertainUntil === undefined || state.bootUncertainUntil <= this.now();
+      if (observed !== undefined && offStates.has(observed) && bootSettled) {
+        state.pendingStop = false; state.phase = "off"; state.powerOwned = false; state.startRequestedAt = undefined; state.waitStartedAt = undefined;
+        state.bootUncertainUntil = undefined; state.bootObserved = undefined; state.bootVerification = undefined; state.error = undefined; clearCapacityRetry(state);
       }
       else { state.pendingStop = true; state.phase = "stopping"; state.error = error; }
       });
       return true;
     });
-    if (!accepted || observed !== undefined && offStates.has(observed) && this.state.leases.some(lease => active(lease) && !lease.recovered)) this.requested = true;
+    if (!accepted || !this.state.pendingStop && observed !== undefined && offStates.has(observed) && this.state.leases.some(lease => active(lease) && !lease.recovered)) this.requested = true;
   }
   private async step() {
     if (this.state.pendingStop) { await this.stopOnce(); return; }
     const operation = await this.lock(async () => {
       const leases = this.state.leases.filter(lease => active(lease) && !lease.recovered);
       if (this.state.pendingStop || !leases.length || this.state.phase === "ready" && leases.every(lease => lease.phase === "ready")) return;
+      if (this.state.capacityRetryAt !== undefined && this.state.capacityRetryAt > this.now()) return;
       if (this.state.waitStartedAt === undefined) await this.update(state => { state.waitStartedAt = this.now(); });
       return this.operation();
     });
     if (!operation) { if (this.state.pendingStop) this.requested = true; return; }
     const credentials = operation.settings;
     let powerOnAttempted = false;
+    let powerOnAccepted = false;
+    let capacityOffConfirmed = false;
+    let bootConfirmedOff = false;
+    let bootVerification = this.state.bootVerification;
     try {
-      if (this.state.waitStartedAt !== undefined && this.now() - this.state.waitStartedAt >= this.startupTimeoutMs)
+      const startupDeadline = (this.state.waitStartedAt ?? this.now()) + this.startupTimeoutMs;
+      if (bootVerification === undefined && this.now() >= startupDeadline)
         throw new AutoDLPowerError("AutoDL 开机长时间未就绪，已安排关机清理。", 502);
-      let observed = await this.platform.status(credentials);
+      let observed: string | undefined;
+      let statusRequestedAt = this.now();
+      try { observed = await this.platform.status(credentials); }
+      catch (reason) { if (bootVerification === undefined) throw reason; }
       if (!this.isCurrent(operation) || this.state.pendingStop || !this.state.leases.some(lease => active(lease) && !lease.recovered)) { this.requested = true; return; }
-      if (offStates.has(observed) && this.state.startRequestedAt === undefined) {
+      if (observed !== undefined && offStates.has(observed) && this.state.startRequestedAt === undefined && this.platform.checkStartup) {
+        try { observed = await this.platform.checkStartup(credentials); }
+        catch (reason) {
+          bootConfirmedOff = isStartupBlocker(reason);
+          throw reason;
+        }
+      }
+      if (observed !== undefined && offStates.has(observed) && this.state.startRequestedAt === undefined) {
         const allowed = await this.lock(async () => {
           // Recheck after every earlier checkpoint has committed. A released task
           // must never leave a boot command behind the release's durable write.
           if (!this.isCurrent(operation) || this.state.pendingStop || !this.state.leases.some(lease => active(lease) && !lease.recovered)) return false;
-          await this.update(state => { state.phase = "starting"; state.startRequestedAt = this.now(); state.powerOwned = true; });
+          await this.update(state => {
+            state.phase = "starting"; state.startRequestedAt = this.now(); state.powerOwned = true;
+            state.bootObserved = false; state.bootUncertainUntil = this.now() + (this.options.bootSettleMs ?? 60_000); state.bootVerification = undefined;
+            state.capacityRetryAt = undefined; for (const lease of state.leases) if (active(lease)) lease.message = undefined;
+          });
           return true;
         });
         if (!allowed) { this.requested = true; return; }
         if (this.state.pendingStop) { this.requested = true; return; }
         powerOnAttempted = true;
-        await this.platform.powerOn(credentials);
-        observed = await this.platform.status(credentials);
+        try {
+          await this.platform.powerOn(credentials);
+          powerOnAccepted = true;
+          observed = await this.platform.status(credentials);
+        } catch (reason) {
+          if (powerOnAccepted || !(reason instanceof AutoDLBridgeError)) throw reason;
+          const uncertain = reason.dispatched === true && !reason.definitive && ["POWER_UNKNOWN", "POWER_STATE_CONFLICT"].includes(reason.code);
+          if (!uncertain && reason.code !== "NO_GPU_CAPACITY") throw reason;
+          let actual: string | undefined;
+          statusRequestedAt = this.now();
+          try { actual = await this.platform.status(credentials); } catch { /* A failed read cannot confirm a power transition. */ }
+          if (actual === "starting" || actual === "running") { powerOnAccepted = true; observed = actual; }
+          else if (uncertain) {
+            observed = actual;
+            const details = formatAutoDLDiagnostics(reason);
+            bootVerification = details ? this.safeError(new Error(details), credentials.apiToken).message : "";
+          } else { capacityOffConfirmed = actual !== undefined && offStates.has(actual); throw reason; }
+        }
       }
       if (!this.isCurrent(operation) || this.state.pendingStop) { this.requested = true; return; }
-      if (offStates.has(observed) && observed !== "shutdown" && this.state.startRequestedAt !== undefined)
+      if (bootVerification !== undefined && observed !== "starting" && observed !== "running") {
+        const deadline = Math.min(startupDeadline, this.state.bootUncertainUntil ?? startupDeadline);
+        const expired = statusRequestedAt >= deadline;
+        if (expired && observed !== undefined && offStates.has(observed)) {
+          bootConfirmedOff = true;
+          const actual = observed === "shutdown" ? "平台仍显示关机" : "平台状态为 " + observed;
+          throw new AutoDLPowerError("AutoDL 未能开机，" + actual + bootVerification + "。请在官网查看开机条件后重试。", 502);
+        }
+        if (expired) throw new AutoDLPowerError("AutoDL 开机核对超时，尚未确认实例状态" + bootVerification + "。已安排关机清理。", 502);
+        if (this.state.bootVerification !== bootVerification) await this.lock(async () => {
+          if (!this.isCurrent(operation) || this.state.pendingStop) return;
+          await this.update(state => {
+            state.bootVerification = bootVerification;
+            for (const lease of state.leases) if (active(lease) && !lease.recovered) lease.message = bootVerificationMessage;
+          });
+        });
+        // A read that began before the deadline can still report a pre-deadline snapshot.
+        if (this.now() >= deadline) this.requested = true;
+        return;
+      }
+      if (observed === "starting" || observed === "running") await this.lock(async () => {
+        if (this.isCurrent(operation)) await this.update(state => {
+          state.bootObserved = true; state.bootUncertainUntil = undefined;
+          if (state.bootVerification !== undefined) {
+            state.bootVerification = undefined;
+            for (const lease of state.leases) if (active(lease)) lease.message = undefined;
+          }
+        });
+      });
+      if (observed !== undefined && offStates.has(observed) && observed !== "shutdown" && this.state.startRequestedAt !== undefined)
         throw new AutoDLPowerError("AutoDL 开机失败，平台状态：" + observed, 502);
       if (observed === "running") {
         const accepted = await this.lock(async () => {
           if (!this.isCurrent(operation) || this.state.pendingStop || !this.state.leases.some(lease => active(lease) && !lease.recovered)) return false;
           await this.update(state => {
-            state.phase = "ready"; state.powerOwned = true; state.waitStartedAt = undefined; state.error = undefined;
+            state.phase = "ready"; state.powerOwned = true; state.waitStartedAt = undefined; state.error = undefined; clearCapacityRetry(state);
             for (const lease of state.leases) if (active(lease) && !lease.recovered) lease.phase = "ready";
           });
           return true;
@@ -430,20 +549,34 @@ export class AutoDLPowerService {
         if (!accepted) this.requested = true;
       }
     } catch (reason) {
-      const error = this.safeError(reason, credentials.apiToken).message;
+      let error = this.safeError(reason, credentials.apiToken).message;
       const accepted = await this.lock(async () => {
         if (!this.isCurrent(operation)) {
           // A corrected token may retry a rejected boot, but an old response
           // cannot fail or ready the new operation's leases.
-          if (powerOnAttempted && sameBinding(this.state.settings, credentials) && this.state.settings.apiToken !== credentials.apiToken && !this.state.pendingStop)
-            await this.update(state => { state.startRequestedAt = undefined; });
           return false;
         }
         await this.update(state => {
+          if (capacityOffConfirmed && powerOnAttempted && !powerOnAccepted && reason instanceof AutoDLBridgeError && reason.code === "NO_GPU_CAPACITY" &&
+            !state.pendingStop && state.leases.some(lease => active(lease) && !lease.recovered) && (state.capacityRetryCount ?? 0) < 2) {
+            state.capacityRetryCount = (state.capacityRetryCount ?? 0) + 1; state.capacityRetryAt = this.now() + 30_000;
+            state.phase = "starting"; state.powerOwned = false; state.startRequestedAt = undefined; state.bootUncertainUntil = undefined; state.bootObserved = undefined; state.error = undefined;
+            for (const lease of state.leases) if (active(lease) && !lease.recovered) {
+              lease.phase = "starting"; lease.error = undefined; lease.message = `AutoDL 当前算力规格暂无库存，30 秒后重试（${state.capacityRetryCount}/2），可取消任务。`;
+            }
+            return;
+          }
+          if (reason instanceof AutoDLBridgeError && reason.code === "NO_GPU_CAPACITY" && (state.capacityRetryCount ?? 0) >= 2)
+            error += " 已完成 2 次重试，请稍后重新生成或在官网调整规格。";
+          clearCapacityRetry(state);
           for (const lease of state.leases) if (active(lease) && !lease.recovered) { lease.phase = "failed"; lease.error = error; }
           state.error = error;
+          state.bootVerification = undefined;
+          if (bootConfirmedOff || powerOnAttempted && !powerOnAccepted && reason instanceof AutoDLBridgeError && (reason.dispatched === false || reason.definitive)) {
+            state.powerOwned = false; state.startRequestedAt = undefined; state.bootUncertainUntil = undefined; state.bootObserved = undefined;
+          }
           if (!state.leases.some(active) && state.powerOwned) { state.pendingStop = true; state.phase = "stopping"; }
-          else if (!state.pendingStop) { state.phase = "error"; state.waitStartedAt = undefined; }
+          else if (!state.pendingStop) { state.phase = bootConfirmedOff ? "off" : "error"; state.waitStartedAt = undefined; }
         });
         return true;
       });
@@ -454,11 +587,15 @@ export class AutoDLPowerService {
     if (this.disposed) return;
     this.disposed = true;
     if (this.timer) clearInterval(this.timer);
-    if (!this.initialized) return;
-    await this.initialized;
-    await this.working;
-    // Closing a local server must not interrupt a generation that still owns a lease.
-    if (this.state.pendingStop) await this.stopOnce();
+    try {
+      if (!this.initialized) return;
+      await this.initialized;
+      await this.working;
+      // Closing a local server must not interrupt a generation that still owns a lease.
+      if (this.state.pendingStop) await this.stopOnce();
+    } finally {
+      await Promise.all([this.browser?.close(), this.broker.close()]);
+    }
   }
 }
 

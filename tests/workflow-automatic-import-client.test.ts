@@ -50,6 +50,14 @@ function prior(value: PreparedWorkflowImport): WorkflowImportSource {
   } };
 }
 const automaticResult = (value: PreparedWorkflowImport) => ({ prepared: value, warnings: ["new automatic import result"], schema: { info: {}, warnings: [] }, manager: { marker: "latest Manager result" } });
+const publishedPrompt = { nodeId: "49", field: "text" };
+const multipromptSource = () => ({
+  "49": { class_type: "CR Text", inputs: { text: "first-stage sample" } },
+  "70": { class_type: "CR Prompt Text", inputs: { prompt: "second-stage sample" } },
+  first: { class_type: "OwnImageGenerator", inputs: { prompt: ["49", 0] } },
+  second: { class_type: "OwnImageGenerator", inputs: { prompt: ["70", 0], image: ["first", 0] } },
+  save: { class_type: "SaveImage", inputs: { images: ["second", 0], filename_prefix: "test" } },
+});
 
 describe("automatic import persistence and retry", () => {
   it("saves a new automatically prepared import once in idempotent mode", async () => {
@@ -90,6 +98,46 @@ describe("automatic import persistence and retry", () => {
     expect(calls.save.mock.calls[0][0]).toMatchObject({ overwrite: true, graph: value.graph, requirements: value.requirements, config: { nameLabel: existing.config.nameLabel, primaryCategoryLabel: existing.config.primaryCategoryLabel } });
     expect(response).toMatchObject({ saved: result, manager: automatic.manager, warnings: automatic.warnings });
     expect(response.prepared.source).toEqual(existing.source);
+  });
+
+  it("uses the verified publisher target when checking a saved workflow", async () => {
+    const source = multipromptSource(), signal = new AbortController().signal;
+    const original = await prepareWorkflowImport(source, "original.json", undefined, undefined, signal, publishedPrompt);
+    const existing = { source, filename: "original.json", config: original.config };
+    calls.read.mockResolvedValue(existing);
+    calls.automatic.mockImplementation(async (source, filename, _conn, signal, _progress, options) =>
+      automaticResult(await prepareWorkflowImport(source, filename, undefined, undefined, signal, options.publishedPrompt)));
+    calls.save.mockResolvedValue(saved(String(original.config.id)));
+
+    const result = await repairSavedWorkflowImport(String(original.config.id), connection, signal, undefined, { installMissingPlugins: false });
+    expect(calls.automatic).toHaveBeenCalledExactlyOnceWith(source, existing.filename, connection, signal, undefined,
+      { installMissingPlugins: false, publishedPrompt });
+    expect(result.prepared.config.prompt).toMatchObject({ binding: { nodeId: "49", path: "inputs.text" } });
+    expect(result.prepared.config.importPublishedPrompt).toEqual(publishedPrompt);
+    expect(result.prepared.graph).toEqual(original.graph);
+  });
+
+  it.each([false, true])("restores a saved publisher binding from an identical unannotated upload while respecting review=%s", async manual => {
+    const source = multipromptSource(), signal = new AbortController().signal;
+    const original = await prepareWorkflowImport(source, "original.json", undefined, undefined, signal, publishedPrompt);
+    const unannotated = await prepareWorkflowImport(source, "same-source.json");
+    expect(unannotated.config.prompt).toBeUndefined();
+    expect(unannotated.config.id).toBe(original.config.id);
+    const existing: WorkflowImportSource = { source, filename: "original.json", config: { ...original.config, nameLabel: "Author library title" } };
+    if (manual) existing.config.importBindingReview = {
+      ...initialImportReview(original), prompt: { nodeId: "70", field: "prompt", classType: "CR Prompt Text" },
+    };
+    calls.save.mockResolvedValueOnce(saved(String(original.config.id), true)).mockResolvedValueOnce(saved(String(original.config.id)));
+    calls.read.mockResolvedValue(existing);
+
+    const { prepared: reopened } = await saveAutomaticWorkflowImport(unannotated, signal);
+    const target = manual ? { nodeId: "70", field: "prompt" } : publishedPrompt;
+    expect(reopened.config.prompt).toMatchObject({ binding: { nodeId: target.nodeId, path: "inputs." + target.field } });
+    expect(reopened.config.importPublishedPrompt).toEqual(publishedPrompt);
+    expect(reopened.config.nameLabel).toBe("Author library title");
+    expect(reopened.config.importBindingReview).toEqual(existing.config.importBindingReview);
+    expect(reopened.graph).toEqual(original.graph);
+    expect(calls.save).toHaveBeenCalledTimes(2);
   });
 
   it("does not overwrite another workflow when the verified source identity differs", async () => {

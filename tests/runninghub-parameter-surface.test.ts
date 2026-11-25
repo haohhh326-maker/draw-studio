@@ -195,19 +195,21 @@ describe("RunningHub source-owned parameter presentation", () => {
     expect(values).toEqual(before);
   });
 
-  it("retains public required fields and enum wire values without inventing absent source bounds", async () => {
+  it("keeps published bounds and leaves unbounded public fields open", async () => {
     const workflow = await appFixture([{ nodeId: "1", fieldName: "prompt", fieldValue: "[sanitized prompt]", fieldType: "STRING" },
       { nodeId: "2", fieldName: "business_control", fieldValue: "", fieldType: "STRING", required: true, description: "必须填写的业务字段" },
       { nodeId: "3", fieldName: "variant", fieldValue: "a", fieldType: "LIST", fieldData: [["a", "b"], {}], required: true },
       { nodeId: "4", fieldName: "opaque_scale", fieldValue: 2, fieldType: "FLOAT", required: true, min: .5, max: 8, step: .5 },
-      { nodeId: "5", fieldName: "api_key", fieldValue: "", fieldType: "API_KEY", secret: true }]);
+      { nodeId: "5", fieldName: "api_key", fieldValue: "", fieldType: "API_KEY", secret: true },
+      { nodeId: "6", fieldName: "unbounded_scale", fieldValue: 3, fieldType: "FLOAT" }]);
     const shown = visible(workflow), variant = boundParameter(workflow, "3", "variant"), scale = boundParameter(workflow, "4", "opaque_scale");
-    expect(shown).toHaveLength(3);
+    expect(shown).toHaveLength(4);
     expect(boundParameter(workflow, "2", "business_control")).toMatchObject({ type: "text", required: true, default: "" });
     expect(variant.options?.map(id => variant.optionValues?.[id])).toEqual(["a", "b"]);
     expect(variant.default).toBe("a"); expect(variant.required).toBe(true);
-    expect(scale).toMatchObject({ default: 2, required: true, step: .5 });
-    expect(scale.min).toBeUndefined(); expect(scale.max).toBeUndefined();
+    expect(scale).toMatchObject({ default: 2, required: true, min: .5, max: 8, step: .5 });
+    const unbounded = boundParameter(workflow, "6", "unbounded_scale");
+    expect(unbounded.min).toBeUndefined(); expect(unbounded.max).toBeUndefined();
   });
 
   it("leaves local cloud presentation on its existing independent path", async () => {

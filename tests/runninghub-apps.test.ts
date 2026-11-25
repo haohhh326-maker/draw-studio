@@ -145,6 +145,89 @@ describe("RunningHub AI app original reads and references", () => {
     expect(runningHubAppFromRead(read as unknown as AifisherWorkflowReadResult).nodeInfoList.map(field => field.fieldValue)).toEqual([20, 3.5, false]);
   });
 
+  it.each(["cn", "ai"])("reads every published indexed option, toggle and numeric bound and sends each exact value on %s", async site => {
+    const origin = "https://www.runninghub." + site, appId = "2037066655557226498";
+    const menu = (values: (string | number | boolean)[]) => JSON.stringify(values.map((index, i) => ({ index, name: "option " + i })));
+    const nodeInfoList = [
+      { nodeId: "2", fieldName: "image", fieldType: "IMAGE", fieldValue: "None" },
+      { nodeId: "3", fieldName: "file", fieldType: "VIDEO", fieldValue: "None" },
+      { nodeId: "1", fieldName: "real_person_mode", fieldType: "BOOLEAN", fieldValue: "true" },
+      { nodeId: "1", fieldName: "duration", fieldType: "LIST", fieldValue: "15", fieldData: menu(["4", "10", "15"]) },
+      { nodeId: "1", fieldName: "ratio", fieldType: "LIST", fieldValue: "16:9", fieldData: menu(["adaptive", "16:9", "9:16"]) },
+      { nodeId: "1", fieldName: "resolution", fieldType: "LIST", fieldValue: "720p", fieldData: menu(["480p", "720p", "native1080p"]) },
+      { nodeId: "1", fieldName: "scale", fieldType: "FLOAT", fieldValue: "1.2", fieldData: '["FLOAT",{"min":0.5,"max":2,"step":0.1}]' },
+      { nodeId: "1", fieldName: "prompt", fieldType: "STRING", fieldValue: "[authored prompt]" },
+    ];
+    const before = structuredClone(nodeInfoList);
+    const read = await readAIFisherWorkflow({ environment: "runninghub-webapp", remote: { baseUrl: origin, remoteId: appId, apiKey: token } }, {
+      fetcher: vi.fn(async (url, init) => {
+        const parsed = new URL(String(url));
+        expect(parsed.origin).toBe(origin);
+        expect(parsed.pathname).toBe(site === "cn" ? "/api/webapp/apiCallDemo" : "/api/webapp/detail");
+        expect(init?.method).toBe(site === "cn" ? "GET" : "POST");
+        return ok(site === "cn" ? { name: "Indexed controls", nodeInfoList } : { id: appId, name: "Indexed controls", inputNodes: nodeInfoList });
+      }),
+    });
+    expect(read.bindingCandidates).toHaveLength(nodeInfoList.length);
+    expect(read.parameterBindings).toHaveLength(nodeInfoList.length);
+    const source = runningHubAppFromRead(read as unknown as AifisherWorkflowReadResult);
+    const { workflow } = prepareRunningHubApp(source, { ...options, baseUrl: origin, workflowId: appId,
+      outputs: [{ nodeId: runningHubAppOutputNode, field: "files", kind: "video" }] });
+    expect(workflow.template?.["1"].inputs).toEqual({ real_person_mode: true, duration: "15", ratio: "16:9", resolution: "720p", scale: 1.2, prompt: "[authored prompt]" });
+    const key = (field: string) => workflow.mapping.find(binding => binding.nodeId === "1" && binding.field === field)!.semantic;
+    const ratio = workflow.parameters.find(parameter => parameter.key === key("ratio"))!;
+    expect(ratio.options?.map(option => ratio.optionValues![option])).toEqual(["adaptive", "16:9", "9:16"]);
+    expect(workflow.parameters.find(parameter => parameter.key === key("scale"))).toMatchObject({ min: 0.5, max: 2, step: 0.1 });
+    const node = { data: { generation: { workflowId: workflow.id, prompt: "read all inputs", negativePrompt: "", taskId: null,
+      params: { [ratio.key]: ratio.optionValues![ratio.options![2]] } } } } as CanvasNode;
+    const prompt = buildWorkflow(workflow, node, [], {}).workflow;
+    const fetcher = fetches(ok({ taskId: "read-complete", taskStatus: "RUNNING" }));
+    await expect(new RunningHubClient({ ...connection, baseUrl: origin }, "field-parity", workflow).queuePrompt(prompt, "typed-values")).resolves.toBe("read-complete");
+    expect(fetcher).toHaveBeenCalledOnce();
+    expect(String(fetcher.mock.calls[0][0])).toBe(origin + "/task/openapi/ai-app/run");
+    expect(JSON.parse(String(fetcher.mock.calls[0][1]?.body)).nodeInfoList).toEqual([
+      { nodeId: "1", fieldName: "duration", fieldValue: "15" },
+      { nodeId: "1", fieldName: "prompt", fieldValue: "read all inputs" },
+      { nodeId: "1", fieldName: "ratio", fieldValue: "9:16" },
+      { nodeId: "1", fieldName: "real_person_mode", fieldValue: true },
+      { nodeId: "1", fieldName: "resolution", fieldValue: "720p" },
+      { nodeId: "1", fieldName: "scale", fieldValue: 1.2 },
+      { nodeId: "2", fieldName: "image", fieldValue: "None" },
+      { nodeId: "3", fieldName: "file", fieldValue: "None" },
+    ]);
+    expect(nodeInfoList).toEqual(before);
+  });
+
+  it("preserves a published Unicode field through binding and submits its exact field name", async () => {
+    const fieldName = "预设说话人", id = "613";
+    const source = { appName: "TTS 字段", nodeInfoList: [
+      { nodeId: id, fieldName, fieldType: "LIST", fieldValue: "Vivian",
+        fieldData: '[{"name":"Vivian","index":"Vivian"},{"name":"Eric","index":"Eric"}]' },
+      { nodeId: id, fieldName: "__proto__", fieldType: "STRING", fieldValue: "unsafe prototype" },
+      { nodeId: id, fieldName: "nested.constructor", fieldType: "STRING", fieldValue: "unsafe property" },
+      { nodeId: id, fieldName: "路径/unsafe", fieldType: "STRING", fieldValue: "unsafe path" },
+    ] };
+    const before = structuredClone(source), read = await readSource(source);
+    const appSource = runningHubAppFromRead(read as unknown as AifisherWorkflowReadResult);
+    expect(appSource.nodeInfoList.map(field => field.fieldName)).toEqual([fieldName]);
+    expect(read.projection?.snapshot.fields.map((field: { fieldName: string }) => field.fieldName)).toEqual([fieldName]);
+    expect(read.workflow?.[id].inputs).toEqual({ [fieldName]: "Vivian" });
+    expect(read.bindingCandidates).toEqual([expect.objectContaining({ nodeId: id, fieldName })]);
+    const prepared = prepareRunningHubApp(appSource, { ...options, outputs: [{ nodeId: runningHubAppOutputNode, field: "files", kind: "audio" }] });
+    const workflow = await attachRunningHubExecutionContract(prepared.workflow, appSource);
+    const binding = workflow.mapping.find(item => item.nodeId === id && item.field === fieldName)!;
+    const parameter = workflow.parameters.find(item => item.key === binding.semantic)!;
+    expect(parameter.label).toBe(fieldName);
+    expect(parameter.options?.map(option => parameter.optionValues![option])).toEqual(["Vivian", "Eric"]);
+    const node = { data: { generation: { workflowId: workflow.id, prompt: "", negativePrompt: "", taskId: null,
+      params: { [parameter.key]: "Eric" } } } } as CanvasNode;
+    const graph = buildWorkflow(workflow, node, [], {}).workflow;
+    const fetcher = fetches(ok({ taskId: "unicode-field", taskStatus: "RUNNING" }));
+    await expect(new RunningHubClient(connection, "unicode-field", workflow).queuePrompt(graph, "unicode-field")).resolves.toBe("unicode-field");
+    expect(JSON.parse(String(fetcher.mock.calls[0][1]?.body)).nodeInfoList).toEqual([{ nodeId: id, fieldName, fieldValue: "Eric" }]);
+    expect(source).toEqual(before);
+  });
+
   it("does not hide auth/server/network errors behind an app fallback", () => {
     expect(isRunningHubReferenceNotFound(new ApiError("missing", 404))).toBe(true);
     for (const error of [new ApiError("denied", 403), new ApiError("invalid", 401), new ApiError("server", 500), new Error("network"), new ExecutionError("not found")]) expect(isRunningHubReferenceNotFound(error)).toBe(false);

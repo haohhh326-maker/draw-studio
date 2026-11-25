@@ -4,6 +4,7 @@ import { createDecipheriv, createHash } from "node:crypto";
 import { convertLibraryWorkflow, createLibraryRegistration, localized, type LibraryConversionSource } from "../src/workflow/library-converter";
 import { isLegacyImportFamily } from "../src/workflow/import-category";
 import type { WorkflowDefinition } from "../src/types";
+import { serializedWorkflowLibraryRoot } from "./workflow-library-queue";
 
 export type WorkflowLibrarySnapshot = {
   sourcePath: string;
@@ -71,13 +72,17 @@ function decodeDefaultContainer(bytes: Buffer, key: Buffer) {
 }
 
 export async function readWorkflowLibrary(requestedSource: string): Promise<WorkflowLibrarySnapshot> {
-  const snapshot: WorkflowLibrarySnapshot = {sourcePath:path.resolve(requestedSource), loadedAt:Date.now(), workflows:[],issues:[],scanned:0};
   let root: string;
   try {
-    root = await realpath(snapshot.sourcePath);
+    root = await realpath(path.resolve(requestedSource));
     if (!(await stat(root)).isDirectory()) throw new Error("工作流库路径不是目录。");
-    snapshot.sourcePath = root;
   } catch { throw new Error("无法读取配置的本地工作流库目录。"); }
+  // An overwrite briefly moves the old package to a hidden backup.
+  return serializedWorkflowLibraryRoot(root, () => scanWorkflowLibrary(root));
+}
+
+async function scanWorkflowLibrary(root: string): Promise<WorkflowLibrarySnapshot> {
+  const snapshot: WorkflowLibrarySnapshot = {sourcePath:root, loadedAt:Date.now(), workflows:[],issues:[],scanned:0};
   let key: Promise<Buffer> | undefined;
   const ids = new Map<string,string>();
   for (const entry of (await readdir(root,{withFileTypes:true})).sort((a,b) => a.name.localeCompare(b.name))) {

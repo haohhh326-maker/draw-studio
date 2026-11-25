@@ -109,7 +109,8 @@ describe("RunningHub has one original AIFISHER read path", () => {
     const before = structuredClone(publicApp);
     const result = await readAIFisherWorkflow({ environment: "runninghub-webapp", remoteId: appId, source: publicApp });
     const projection = createRunningHubWebAppProjection(appId, publicApp);
-    expect(result.projection).toEqual(projection);
+    expect(result.projection?.snapshot.fields.map(({ minimum, maximum, step, ...field }) => field)).toEqual(
+      projection.snapshot.fields.map(({ minimum, maximum, step, ...field }) => field));
     expect(result.workflow).toEqual(projection.executionPlan);
     expect(result.parameterBindings).toHaveLength(7);
     expect(result.parameterBindings?.map(binding => binding.key)).toEqual([
@@ -128,6 +129,8 @@ describe("RunningHub has one original AIFISHER read path", () => {
       ["field_228_aspect_ratio", "aspect_ratio", "select", "16:9 (Widescreen)"],
       ["field_228_megapixels", "megapixels", "number", 1],
     ]);
+    expect(workflow.parameters.find(parameter => parameter.label === "megapixels")).toMatchObject({ min: 0.1, max: 16, step: 0.1 });
+    expect(workflow.parameters.find(parameter => parameter.label === "电影感lora强度")).toMatchObject({ min: -100, max: 100, step: 0.01 });
     const ratio = workflow.parameters[2];
     expect(ratio.options?.map(id => ratio.optionValues?.[id])).toEqual(ratios);
     const surface = generationParameterSurface(workflow);
@@ -203,7 +206,13 @@ describe("RunningHub has one original AIFISHER read path", () => {
       ts.forEachChild(node, collectMethods);
     }
     collectMethods(parsedClient);
-    for (const [name, environment] of [["getWorkflow", "runninghub-workflow"], ["getAiApp", "runninghub-webapp"]]) {
+    for (const name of ["getWorkflow", "getPublicWorkflowExport"]) {
+      const body = methods.get(name)!;
+      expect(body, name).toBeDefined();
+      expect(body, name).toContain("this.readWorkflowDefinition(");
+      expect(/this\.(?:post|request)\(|apiCallDemo|getJsonApiFormat|parseRunningHub/.test(body), name).toBe(false);
+    }
+    for (const [name, environment] of [["readWorkflowDefinition", "runninghub-workflow"], ["getAiApp", "runninghub-webapp"]]) {
       const body = methods.get(name)!;
       expect(body, name).toBeDefined();
       expect(body.includes(`readAifisherWorkflow({ environment: "${environment}", remote:`), name).toBe(true);

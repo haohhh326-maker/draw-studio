@@ -54,3 +54,87 @@ describe("RunningHub published workflow card metadata", () => {
     }
   });
 });
+
+describe("RunningHub AI app public workflow links", () => {
+  const sourceId = "1935238341434462209";
+  const app = { id, workflowId: sourceId, workflowState: 1 };
+  const input = { nodeId: "49", fieldName: "text", fieldType: "STRING", description: "提示词", fieldValue: "sample prompt" };
+  const source = { id: sourceId, name: "公开工作流", workflowState: 1, webappId: id,
+    publishAccess: { granted: true, encrypted: false, needPassword: false } };
+  const detail = (data: object) => new Response(JSON.stringify({ code: 0, data }));
+
+  it("resolves the officially linked workflow with its exact ID and no credentials", async () => {
+    const fetcher = vi.fn<typeof fetch>().mockResolvedValueOnce(detail(app)).mockResolvedValueOnce(detail(source));
+    vi.stubGlobal("fetch", fetcher);
+    const { signal } = new AbortController();
+    await expect(client().getPublishedAppWorkflow(id, signal)).resolves.toEqual({ id: sourceId, name: source.name });
+    expect(fetcher.mock.calls.map(([url, init]) => [url, JSON.parse(String(init?.body))])).toEqual([
+      [connection.baseUrl + "/api/webapp/detail", { webappId: id }],
+      [connection.baseUrl + "/api/workflow/getDetail", { workflowId: sourceId }],
+    ]);
+    for (const [, init] of fetcher.mock.calls) {
+      expect(new Headers(init?.headers).has("authorization")).toBe(false);
+      expect(init).toMatchObject({ credentials: "omit", redirect: "error", signal });
+    }
+  });
+
+  it("carries the publisher's sole prompt node and field without copying the sample text", async () => {
+    vi.stubGlobal("fetch", vi.fn<typeof fetch>().mockResolvedValueOnce(detail({ ...app, inputNodes: [input] })).mockResolvedValueOnce(detail(source)));
+    await expect(client().getPublishedAppWorkflow(id)).resolves.toEqual({ id: sourceId, name: source.name,
+      publishedPrompt: { nodeId: "49", field: "text" } });
+  });
+
+  it.each([
+    [{ ...input, fieldType: "IMAGE" }],
+    [{ ...input, fieldName: "prompt", description: "负向提示词" }],
+    [{ ...input, fieldName: "prompt", secret: true }],
+    [input, { ...input, nodeId: "70", fieldName: "prompt" }],
+  ].map(inputNodes => ({ inputNodes })))
+    ("keeps the workflow importable without a hint for unsafe or ambiguous prompt metadata", async ({ inputNodes }) => {
+      vi.stubGlobal("fetch", vi.fn<typeof fetch>().mockResolvedValueOnce(detail({ ...app, inputNodes })).mockResolvedValueOnce(detail(source)));
+      await expect(client().getPublishedAppWorkflow(id)).resolves.toEqual({ id: sourceId, name: source.name });
+    });
+
+  it("reads the same prompt evidence from a workflow link through its verified public app", async () => {
+    const fetcher = vi.fn<typeof fetch>().mockResolvedValueOnce(detail(source)).mockResolvedValueOnce(detail({ ...app, inputNodes: [input] }));
+    vi.stubGlobal("fetch", fetcher);
+    await expect(client().getWorkflowImportMetadata(sourceId)).resolves.toEqual({ name: source.name, publishedPrompt: { nodeId: "49", field: "text" } });
+    expect(fetcher.mock.calls.map(([url, init]) => [url, JSON.parse(String(init?.body))])).toEqual([
+      [connection.baseUrl + "/api/workflow/getDetail", { workflowId: sourceId }],
+      [connection.baseUrl + "/api/webapp/detail", { webappId: id }],
+    ]);
+  });
+
+  it.each([() => detail({ ...app, workflowId: "10", inputNodes: [input] }), () => new Response(null, { status: 503 })])
+    ("keeps the workflow title when linked app evidence is unavailable or mismatched", async response => {
+      vi.stubGlobal("fetch", vi.fn<typeof fetch>().mockResolvedValueOnce(detail(source)).mockResolvedValueOnce(response()));
+      await expect(client().getWorkflowImportMetadata(sourceId)).resolves.toEqual({ name: source.name });
+    });
+
+  it.each([
+    { ...app, workflowId: null },
+    { ...app, workflowState: 0 },
+    { ...app, id: "1" },
+    { ...app, workflowId: Number(sourceId) },
+    { ...app, publishAccess: { granted: false } },
+  ])("stops before reading a source when the app card cannot verify a published source", async appCard => {
+    const fetcher = vi.fn<typeof fetch>().mockResolvedValueOnce(detail(appCard));
+    vi.stubGlobal("fetch", fetcher);
+    await expect(client().getPublishedAppWorkflow(id)).resolves.toBeUndefined();
+    expect(fetcher).toHaveBeenCalledTimes(1);
+  });
+
+  it.each([
+    { ...source, id: "1" },
+    { ...source, webappId: "1" },
+    { ...source, workflowState: 0 },
+    { ...source, publishAccess: { granted: false } },
+    { ...source, publishAccess: { encrypted: true } },
+    { ...source, publishAccess: { needPassword: true } },
+  ])("rejects an unrelated, private or password-protected workflow card", async sourceCard => {
+    const fetcher = vi.fn<typeof fetch>().mockResolvedValueOnce(detail(app)).mockResolvedValueOnce(detail(sourceCard));
+    vi.stubGlobal("fetch", fetcher);
+    await expect(client().getPublishedAppWorkflow(id)).resolves.toBeUndefined();
+    expect(fetcher).toHaveBeenCalledTimes(2);
+  });
+});

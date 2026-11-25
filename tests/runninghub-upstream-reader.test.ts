@@ -25,6 +25,30 @@ const publicApp = {
 };
 
 describe("RunningHub unchanged AIFISHER reader adapter", () => {
+  it("keeps a Unicode main prompt separate from a dotted non-text field with the same flattened key", async () => {
+    const source = {
+      "镜头": { class_type: "ImageSource", inputs: { "配置.prompt": 42 } },
+      "镜头.配置": { class_type: "PromptText", inputs: { prompt: "原作者提示词" } },
+      save: { class_type: "SaveImage", inputs: { images: ["镜头", 0] } },
+    };
+    const reader = await readAIFisherWorkflow({ environment: "runninghub-workflow", source }) as unknown as RunningHubReaderResult;
+    expect(analyzeRunningHubUpstream(reader).prompts).toEqual([
+      expect.objectContaining({ nodeId: "镜头.配置", field: "prompt" }),
+    ]);
+    const { workflow } = prepareRunningHubWorkflowCandidates(source, {
+      workflowId: "123", baseUrl: "https://www.runninghub.cn", name: "独立字段", reader,
+      promptKey: "镜头.配置.prompt", outputs: [{ nodeId: "save", kind: "image", field: "images" }],
+    });
+    expect(workflow.mapping.filter(target => target.semantic === "prompt")).toEqual([
+      { semantic: "prompt", nodeId: "镜头.配置", field: "prompt" },
+    ]);
+    const canvas = { data: { generation: { prompt: "用户的提示词", params: {} } } } as CanvasNode;
+    const expected = structuredClone(source);
+    expected["镜头.配置"].inputs.prompt = "用户的提示词";
+    expect(buildWorkflow(workflow, canvas, [], {}).workflow).toEqual(expected);
+    expect(workflow.template).toEqual(source);
+  });
+
   it("keeps platform tags but classifies the actual IMAGE-input app only after confirming video output", async () => {
     const read = await readAIFisherWorkflow({ environment: "runninghub-webapp", remoteId: "2092444522851684354", source: publicApp });
     const app = runningHubAppFromRead(read as unknown as AifisherWorkflowReadResult);

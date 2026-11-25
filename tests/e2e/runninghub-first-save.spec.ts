@@ -1,6 +1,7 @@
 import { expect, test, type Page } from "@playwright/test";
 import { readAIFisherWorkflow } from "../../scripts/aifisher-workflow-reader";
 import type { WorkflowDefinition } from "../../src/types";
+import { openCanvasAddMenu } from "./helpers";
 
 const workflowId = "2115791287499706370";
 const graph = {
@@ -13,7 +14,8 @@ type DigestGate = { enabled: boolean; started: boolean; release: () => void };
 type DigestGateWindow = Window & { runningHubSaveDigest: DigestGate };
 
 async function openManager(page: Page, mode: "workflow" | "app") {
-  await page.getByRole("button", { name: "远程连接", exact: true }).click();
+  await page.locator(".react-flow__node").filter({ hasText: "图像 1" }).click();
+  await page.getByRole("button", { name: "选择当前节点算力", exact: true }).click();
   const switcher = page.getByRole("dialog", { name: "选择算力", exact: true });
   await switcher.getByRole("button", { name: mode === "workflow" ? "工作流" : "AI 应用", exact: true }).click();
   await switcher.getByRole("button", { name: mode === "workflow" ? "添加 / 管理远端工作流" : "添加 / 管理 AI 应用", exact: true }).click();
@@ -96,6 +98,8 @@ for (const { mode, closeWhileSaving } of scenarios) {
     await page.getByRole("button", { name: "新建项目", exact: true }).click();
     await page.getByLabel("项目名称").fill("Isolated first-click save");
     await page.getByRole("button", { name: "创建并打开" }).click();
+    await openCanvasAddMenu(page);
+    await page.getByRole("menuitem", { name: /^图像/ }).click();
     const dialog = await openManager(page, mode);
     await dialog.getByLabel("RunningHub CN 国内站 API Key", { exact: true }).fill("isolated-first-click-key");
     await dialog.getByRole("button", { name: "保存到本机", exact: true }).click();
@@ -145,3 +149,64 @@ for (const { mode, closeWhileSaving } of scenarios) {
     expect(unexpectedCalls).toEqual([]);
   });
 }
+
+test("commits an AI app and a remote workflow from two already-open tabs without losing either catalog entry", async ({ page, context, baseURL }) => {
+  const appName = "Parallel AI app";
+  const workflowName = "Parallel workflow";
+  const workflowRead = await readAIFisherWorkflow({ environment: "runninghub-workflow", source: graph, remoteId: workflowId });
+  const appRead = await readAIFisherWorkflow({ environment: "runninghub-webapp", remoteId: workflowId,
+    source: { appName, nodeInfoList: [
+      { nodeId: "1", fieldName: "prompt", fieldType: "STRING", fieldValue: "sample prompt" },
+      { nodeId: "2", fieldName: "prompt", fieldType: "STRING", fieldValue: "second prompt" },
+    ] } });
+  const origin = new URL(baseURL!).origin;
+  await context.route("**/*", route => new URL(route.request().url()).origin === origin ? route.continue() : route.abort());
+  await context.route("**/api/runninghub/**", route => route.fulfill({ status: 503, json: {} }));
+  await context.route("**/__canvas/workflow-reader", route => {
+    const request = route.request().postDataJSON();
+    expect(request.remote.remoteId).toBe(workflowId);
+    return route.fulfill({ json: request.environment === "runninghub-workflow" ? workflowRead : appRead });
+  });
+
+  await page.goto("/");
+  const projectName = "Parallel workflow catalog test";
+  await page.getByRole("button", { name: "新建项目", exact: true }).click();
+  await page.getByLabel("项目名称").fill(projectName);
+  await page.getByRole("button", { name: "创建并打开" }).click();
+  await openCanvasAddMenu(page);
+  await page.getByRole("menuitem", { name: /^图像/ }).click();
+  const projectSave = page.getByRole("button", { name: "保存项目", exact: true });
+  await projectSave.click();
+  await expect(projectSave).toHaveAttribute("title", /已保存到本机/);
+
+  const second = await context.newPage();
+  await second.goto("/");
+  await second.getByRole("button", { name: "打开项目：" + projectName, exact: true }).click();
+  const [workflowDialog, appDialog] = await Promise.all([openManager(page, "workflow"), openManager(second, "app")]);
+  for (const dialog of [workflowDialog, appDialog]) {
+    await dialog.getByLabel("RunningHub CN 国内站 API Key", { exact: true }).fill("isolated-concurrent-key");
+    await dialog.getByRole("button", { name: "保存到本机", exact: true }).click();
+  }
+  await workflowDialog.getByRole("textbox", { name: "ComfyUI 工作流链接或 ID", exact: true }).fill(workflowId);
+  await appDialog.getByRole("textbox", { name: "RunningHub AI 应用 ID 或分享链接", exact: true }).fill(workflowId);
+  await Promise.all([
+    workflowDialog.getByRole("button", { name: "读取工作流", exact: true }).click(),
+    appDialog.getByRole("button", { name: "读取并添加 AI 应用", exact: true }).click(),
+  ]);
+  await workflowDialog.getByRole("textbox", { name: "画布显示名称", exact: true }).fill(workflowName);
+  const workflowSave = workflowDialog.getByRole("button", { name: "添加到画布列表", exact: true });
+  const appSave = appDialog.getByRole("button", { name: "保存 AI 应用", exact: true });
+  await expect(workflowSave).toBeEnabled();
+  await expect(appSave).toBeEnabled();
+  expect(await savedWorkflows(page)).toEqual([]);
+  await Promise.all([workflowSave.click(), appSave.click()]);
+  await expect(workflowDialog.getByText(/已添加远端工作流引用/)).toBeVisible();
+  await expect(appDialog.getByText(new RegExp("已添加“" + appName))).toBeVisible();
+  await page.reload();
+  const workflows = await savedWorkflows(page);
+  expect(workflows).toHaveLength(2);
+  expect(workflows).toEqual(expect.arrayContaining([
+    expect.objectContaining({ name: workflowName, runninghub: expect.objectContaining({ workflowId, kind: "workflow" }), template: workflowRead.workflow }),
+    expect.objectContaining({ name: appName, runninghub: expect.objectContaining({ workflowId, kind: "app" }), template: appRead.workflow }),
+  ]));
+});

@@ -127,8 +127,6 @@ test("Muse uploads connected image and video references in order with a visible 
     await page.getByRole("button", { name: "新建项目", exact: true }).click();
     await page.getByLabel("项目名称").fill("Isolated Muse video references");
     await page.getByRole("button", { name: "创建并打开" }).click();
-    await page.getByRole("button", { name: "远程连接", exact: true }).click();
-    await page.getByRole("dialog", { name: "选择算力", exact: true }).getByRole("radio", { name: /Muse/ }).click();
     for (const [index, original] of originals.entries()) {
       await openCanvasAddMenu(page, { x: 200, y: index ? 570 : 150 });
       await page.getByRole("menuitem", { name: "参考" }).click();
@@ -138,6 +136,9 @@ test("Muse uploads connected image and video references in order with a visible 
     await page.getByRole("menuitem", { name: "视频" }).click();
     const target = page.locator(".react-flow__node").filter({ hasText: "视频 1" });
     const targetId = (await target.getAttribute("data-id"))!;
+    await target.click();
+    await page.getByRole("button", { name: "选择当前节点算力", exact: true }).click();
+    await page.getByRole("dialog", { name: "选择算力", exact: true }).getByRole("radio", { name: /Muse/ }).click();
     await connect(page, page.locator(".react-flow__node").filter({ hasText: "参考 1" }), target);
     await connect(page, page.locator(".react-flow__node").filter({ hasText: "参考 2" }), target);
     await expect(page.locator(".react-flow__edge")).toHaveCount(2);

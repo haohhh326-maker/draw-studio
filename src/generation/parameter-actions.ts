@@ -1,4 +1,5 @@
 import type { Mapping, Parameter, WorkflowDefinition } from "../types";
+import { isWorkflowCredentialFieldName } from "../workflow/credentials";
 import { identifyLoraParameter } from "../workflow/lora-parameters";
 
 export type ParameterAction =
@@ -205,10 +206,20 @@ function loraRole(parameter: Parameter, workflow: WorkflowDefinition): "model" |
   return kinds.size === 1 ? [...kinds][0] : undefined;
 }
 
+const promptTextField = /^(?:(?:positive_|negative_|user_|system_)?(?:prompt|text)(?:_[gl]|_?\d+)?|instruction|prompt_text)$/i;
+function isImportedTextParameter(parameter: Parameter, workflow: WorkflowDefinition) {
+  if (parameter.type !== "text" || parameter.model || parameter.secret) return false;
+  const targets = directParameterTargets(parameter, workflow);
+  if (!targets.length || targets.some(({ field, node }) => isWorkflowCredentialFieldName(field) || typeof node?.inputs[field] !== "string")) return false;
+  return !!parameter.multiline || resolvedParameterTargets(parameter, workflow).some(({ field }) => promptTextField.test(field));
+}
+
 /** Filter only the visible surface; the workflow retains every default and execution binding. */
 export function generationParameterSurface(workflow: WorkflowDefinition, currentValues?: Record<string, string | number | boolean>) {
-  if (workflow.runninghub) return runningHubParameterSurface(workflow, currentValues);
+  const text: Parameter[] = [];
+  if (workflow.runninghub) return { ...runningHubParameterSurface(workflow, currentValues), text };
   const basic: Parameter[] = [], advanced: Parameter[] = [];
+  const importedComfy = workflow.importReader?.environment === "comfyui" && !workflow.muse;
   const loraTargets = (parameter: Parameter) => identifyLoraParameter(parameter, workflow);
   const owners = (parameter: Parameter) => [...new Set(loraTargets(parameter).map(target => JSON.stringify([target.nodeId, target.slot ?? ""])) )];
   const loraNodes = [...new Set(workflow.parameters.filter(parameter => loraRole(parameter, workflow)).flatMap(owners))];
@@ -221,10 +232,11 @@ export function generationParameterSurface(workflow: WorkflowDefinition, current
       const indices = owners(parameter).map(owner => loraNodes.indexOf(owner) + 1);
       const fields = targets.map(mapping => mapping.field);
       advanced.push({ ...parameter, advanced: true, group: loraNodes.length > 1 ? "LoRA " + indices.join("、") : "LoRA", label: lora === "model" ? "LoRA 模型" : fields.length && fields.every(field => /clip|text/i.test(field)) ? "LoRA 强度（文本）" : fields.length && fields.every(field => /model/i.test(field)) ? "LoRA 强度（模型）" : "LoRA 强度" });
-    } else if (role === "steps" && parameter.type === "number") basic.push({ ...parameter, advanced: false, group: "步数", label: stepParameters.length > 1 ? "步数 " + (stepParameters.indexOf(parameter) + 1) : "步数" });
+    } else if (importedComfy && isImportedTextParameter(parameter, workflow)) text.push({ ...parameter, multiline: true });
+    else if (role === "steps" && parameter.type === "number") basic.push({ ...parameter, advanced: false, group: "步数", label: stepParameters.length > 1 ? "步数 " + (stepParameters.indexOf(parameter) + 1) : "步数" });
     else if (!parameter.advanced || role === "width" || role === "height" || role === "ratio" || parameterDestinations(parameter, workflow).some(mapping => /^(?:seed|noise_seed|duration|seconds|megapixels)$/i.test(mapping.field))) basic.push(parameter);
   }
-  return { basic, advanced, other: [] as Parameter[] };
+  return { ...(importedComfy ? importedFooterControls(basic, workflow) : { basic, other: [] as Parameter[] }), advanced, text };
 }
 
 type RunningHubCommonRole = "seed" | "ratio" | "width" | "height" | "megapixels" | "duration" | "steps" | "cfg" | "sampler" | "scheduler" | "denoise" | "fps";
@@ -374,6 +386,52 @@ const runningHubCommonLabels: Record<RunningHubCommonRole, string> = {
   seed: "种子", ratio: "比例", width: "宽", height: "高", megapixels: "百万像素", duration: "时长",
   steps: "步数", cfg: "CFG", sampler: "采样器", scheduler: "调度器", denoise: "降噪强度", fps: "帧率",
 };
+
+/** Keep controls closest to the saved output in the footer and retain earlier stages in settings. */
+function importedFooterControls(parameters: Parameter[], workflow: WorkflowDefinition) {
+  const distances = primaryOutputDistances(workflow);
+  const controls = parameters.map(parameter => {
+    const targets = parameterDestinations(parameter, workflow);
+    const roles = new Set(targets.map(target => runningHubFieldRole(target.field)).filter(Boolean));
+    const role = roles.size === 1 ? [...roles][0] : undefined;
+    return { parameter, role, distance: Math.min(...targets.map(target => distances.get(target.nodeId) ?? Infinity)) };
+  });
+  const byKey = new Map(controls.map(control => [control.parameter.key, control]));
+  const closest = <T extends { distance: number }>(choices: T[]) => {
+    const [first, second] = [...choices].sort((a, b) => a.distance - b.distance);
+    return first && first.distance !== second?.distance ? first : undefined;
+  };
+  const ratios = controls.filter(control => control.role === "ratio")
+    .map(control => ({ keys: [control.parameter.key], distance: control.distance }));
+  const pairs = dimensionRatioControls({ ...workflow, parameters }).map(({ width, height }) => ({
+    keys: [width.key, height.key],
+    // Prefer the author's explicit ratio when both controls serve the same stage.
+    distance: Math.max(byKey.get(width.key)!.distance, byKey.get(height.key)!.distance) + .5,
+  }));
+  const sizeGroups = [...ratios, ...pairs];
+  const primarySize = closest(sizeGroups);
+  const settings = new Set<string>();
+  if (sizeGroups.length) for (const control of controls) {
+    if ((control.role === "ratio" || control.role === "width" || control.role === "height")
+      && !primarySize?.keys.includes(control.parameter.key)) settings.add(control.parameter.key);
+  }
+  for (const role of ["seed", "megapixels", "duration"] as const) {
+    const matching = controls.filter(control => control.role === role);
+    const primary = closest(matching);
+    for (const control of matching) if (control !== primary) settings.add(control.parameter.key);
+  }
+  const basic: Parameter[] = [], other: Parameter[] = [];
+  for (const { parameter, role } of controls) {
+    if (settings.has(parameter.key)) {
+      other.push({ ...groupedRunningHubParameter(parameter, workflow), label: role ? runningHubCommonLabels[role] : parameter.label });
+    } else {
+      const label = role && role !== "steps" ? runningHubCommonLabels[role] : parameter.label;
+      basic.push(label === parameter.label ? parameter : { ...parameter, label });
+    }
+  }
+  return { basic, other };
+}
+
 const runningHubBasicRoles = new Set<RunningHubCommonRole>(["seed", "ratio", "width", "height", "megapixels", "duration", "steps"]);
 const runningHubSamplingControl = /sampl|randomnoise|diffusion|denois|scheduler|guider/i;
 const numericRunningHubRoles = new Set<RunningHubCommonRole>(["seed", "width", "height", "megapixels", "duration", "steps", "cfg", "denoise", "fps"]);

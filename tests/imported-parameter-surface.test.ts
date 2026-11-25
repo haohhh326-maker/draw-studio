@@ -6,6 +6,7 @@ import { convertLibraryWorkflow } from "../src/workflow/library-converter";
 import { buildWorkflow } from "../src/workflow-adapter/adapter";
 import { defaults } from "../src/workflow/catalog";
 import { dimensionRatioControls, dimensionRatioOptions, dimensionRatioPatch, dimensionRatioValue, generationParameterSurface, parameterRole } from "../src/generation/parameter-actions";
+import { workflowUsesMainPrompt } from "../src/semantic/prompt";
 import { readWorkflowLibrary } from "../scripts/workflow-library-reader";
 
 const graph = (): ApiWorkflow => ({
@@ -32,6 +33,49 @@ function imported(source: ApiWorkflow, definitions?: Record<string, unknown>) {
 const generationNode = (workflowId: string, params: Record<string, string | number | boolean>): CanvasNode => ({ id: "node", position: { x: 0, y: 0 }, data: { kind: "image-generation", title: "Test", generation: { workflowId, prompt: "", negativePrompt: "", params, taskId: null } } });
 
 describe("imported generation parameter surface", () => {
+  it("exposes both authored stage prompts when there is no main binding and keeps the second prompt after the first is bound", () => {
+    const source: ApiWorkflow = {
+      "49": { class_type: "CR Text", inputs: { text: "reference description" } },
+      "16": { class_type: "CLIPTextEncode", inputs: { text: "avoid blur" } },
+      "17": { class_type: "ReferenceGenerator", inputs: { prompt: ["49", 0], negative: ["16", 0], model_name: "author.safetensors" } },
+      "70": { class_type: "CR Prompt Text", inputs: { prompt: "second stage description" } },
+      "72": { class_type: "QwenImageEditor", inputs: { image: ["17", 0], prompt: ["70", 0], negative_prompt: "avoid defects" } },
+      "79": { class_type: "SaveImage", inputs: { images: ["72", 0], filename_prefix: "author-prefix" } },
+    };
+    const bindings = [["49", "text", "reference description"], ["16", "text", "avoid blur"], ["70", "prompt", "second stage description"],
+      ["72", "negative_prompt", "avoid defects"], ["17", "model_name", "author.safetensors"], ["79", "filename_prefix", "author-prefix"]];
+    const config = {
+      id: "custom.0123456789abcdef", nameLabel: "Staged image", runnerType: "comfyui", nodeKind: "image",
+      importReader: { environment: "comfyui", format: "comfy-api", compileStatus: "ready",
+        repository: "https://github.com/Work-Fisher/AIFISHER", revision: "bdcf3bec054594fcab591952a8c5acef858d6de4" },
+      parameters: bindings.map(([nodeId, field, defaultValue]) => ({
+        id: `input:${nodeId}:${field}`, type: "string", label: source[nodeId].class_type + " · " + field,
+        defaultValue, ui: { placement: "advanced" }, binding: { target: "comfyui", nodeId, path: "inputs." + field },
+      })),
+      execution: { file: "execution.api.json", output: { nodeId: "79", kind: "image", field: "images" } },
+    };
+    const origin = { sourcePath: "test", folder: "test", configSha256: "", executionSha256: "", executionStatus: "plain" as const };
+    const existing = convertLibraryWorkflow(config, source, undefined, origin);
+    const existingInputs = generationParameterSurface(existing).text;
+    expect(workflowUsesMainPrompt(existing)).toBe(false);
+    expect(existingInputs.map(parameter => [parameter.key, parameter.multiline])).toEqual([
+      ["input:49:text", true], ["input:16:text", true], ["input:70:prompt", true], ["input:72:negative_prompt", true],
+    ]);
+    const existingNode = generationNode(existing.id, { "input:49:text": "new reference", "input:70:prompt": "new edit" });
+    const executed = buildWorkflow(existing, existingNode, [], {}).workflow;
+    expect(executed["49"].inputs.text).toBe("new reference");
+    expect(executed["70"].inputs.prompt).toBe("new edit");
+    expect(executed["72"].inputs.image).toEqual(["17", 0]);
+    const repaired = convertLibraryWorkflow({ ...config, prompt: { binding: config.parameters[0].binding }, parameters: config.parameters.slice(1) }, source, undefined, origin);
+    expect(workflowUsesMainPrompt(repaired)).toBe(true);
+    expect(generationParameterSurface(repaired).text.map(parameter => parameter.key)).toEqual(["input:16:text", "input:70:prompt", "input:72:negative_prompt"]);
+    const repairedNode = generationNode(repaired.id, { "input:70:prompt": "another edit" });
+    repairedNode.data.generation!.prompt = "author-bound primary";
+    const repairedOutput = buildWorkflow(repaired, repairedNode, [], {}).workflow;
+    expect(repairedOutput["49"].inputs.text).toBe("author-bound primary");
+    expect(repairedOutput["70"].inputs.prompt).toBe("another edit");
+  });
+
   it("keeps only both LoRA models and their real strengths in settings, with steps primary and hidden parameters executable", () => {
     const source = graph(), before = structuredClone(source), { workflow } = imported(source, info);
     const surface = generationParameterSurface(workflow);
@@ -48,6 +92,42 @@ describe("imported generation parameter surface", () => {
     const checkpoint = workflow.parameters.find(parameter => parameter.key === "ckpt_name")!;
     checkpoint.group = "模型与 LoRA · CheckpointLoaderSimple";
     expect(generationParameterSurface(workflow).advanced.some(parameter => parameter.key === checkpoint.key)).toBe(false);
+  });
+
+  it("shows the output stage ratio, megapixels and seed while keeping earlier stage controls individually editable", () => {
+    const source: ApiWorkflow = {
+      checkpoint: { class_type: "CheckpointLoaderSimple", inputs: { ckpt_name: "author.ckpt" } },
+      positive: { class_type: "CLIPTextEncode", inputs: { clip: ["checkpoint", 1], text: "reference" } },
+      negative: { class_type: "CLIPTextEncode", inputs: { clip: ["checkpoint", 1], text: "avoid blur" } },
+      width: { class_type: "INTConstant", inputs: { value: 576 } },
+      height: { class_type: "INTConstant", inputs: { value: 864 } },
+      latent: { class_type: "EmptyLatentImage", inputs: { width: ["width", 0], height: ["height", 0] } },
+      reference: { class_type: "KSampler", inputs: { model: ["checkpoint", 0], latent_image: ["latent", 0], positive: ["positive", 0], negative: ["negative", 0], seed: 22 } },
+      referenceImage: { class_type: "VAEDecode", inputs: { samples: ["reference", 0], vae: ["checkpoint", 2] } },
+      prompt: { class_type: "TextEncodeQwenImage21", inputs: { clip: ["checkpoint", 1], "images.image_1": ["referenceImage", 0] } },
+      size: { class_type: "ResolutionSelector", inputs: { aspect_ratio: "4:3", megapixels: 2.2 } },
+      finalLatent: { class_type: "EmptyLatentImage", inputs: { width: ["size", 0], height: ["size", 1] } },
+      final: { class_type: "KSampler", inputs: { model: ["checkpoint", 0], latent_image: ["finalLatent", 0], positive: ["prompt", 0], negative: ["negative", 0], seed: 77 } },
+      image: { class_type: "VAEDecode", inputs: { samples: ["final", 0], vae: ["checkpoint", 2] } },
+      save: { class_type: "SaveImage", inputs: { images: ["image", 0] } },
+    };
+    const { workflow } = imported(source);
+    workflow.importReader = { environment: "comfyui", format: "comfy-api", compileStatus: "ready",
+      repository: "https://github.com/Work-Fisher/AIFISHER", revision: "bdcf3bec054594fcab591952a8c5acef858d6de4" };
+    const before = structuredClone(workflow);
+    const { basic, other } = generationParameterSurface(workflow);
+    const key = (nodeId: string, field: string) => workflow.mapping.find(mapping => mapping.nodeId === nodeId && mapping.field === field)!.semantic;
+    expect(basic.map(parameter => [parameter.key, parameter.label])).toEqual([
+      [key("size", "aspect_ratio"), "比例"], [key("size", "megapixels"), "百万像素"], [key("final", "seed"), "种子"],
+    ]);
+    expect(other.map(parameter => parameter.key)).toEqual([key("width", "value"), key("height", "value"), key("reference", "seed")]);
+    expect(dimensionRatioControls({ ...workflow, parameters: basic })).toEqual([]);
+    const modified = buildWorkflow(workflow, generationNode(workflow.id, {
+      ...defaults(workflow), [key("reference", "seed")]: 8, [key("final", "seed")]: 9,
+    }), [], {}).workflow;
+    expect(modified.reference.inputs.seed).toBe(8);
+    expect(modified.final.inputs.seed).toBe(9);
+    expect(workflow).toEqual(before);
   });
 
   it("changes imported bound width and height through common ratios without changing unrelated source data", () => {

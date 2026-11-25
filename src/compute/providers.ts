@@ -18,6 +18,14 @@ export function runningHubSite(baseUrl: string): RunningHubSite {
 }
 export const computeEndpoint = (url: string) => url.trim().replace(/\/+$/, "");
 export const isRunningHubProvider = (provider: ComputeProvider) => provider === "runninghub" || provider === "runninghub-workflow";
+function catalogRunningHubSite(baseUrl: string): RunningHubSite | undefined {
+  try { return runningHubSite(computeEndpoint(baseUrl)); }
+  catch { return undefined; }
+}
+export function sameRunningHubSite(left: string, right: string): boolean {
+  const site = catalogRunningHubSite(left);
+  return site !== undefined && site === catalogRunningHubSite(right);
+}
 type ComputeState = {
   computeProvider: ComputeProvider;
   connection: Connection;
@@ -31,14 +39,15 @@ const catalogs = new WeakMap<WorkflowDefinition[], Map<string, WorkflowDefinitio
 function providerWorkflows(state: ComputeState, selectionOnly: boolean): WorkflowDefinition[] {
   if (state.computeProvider === "muse") return museWorkflows;
   if (!isRunningHubProvider(state.computeProvider)) return state.workflows;
-  const site = computeEndpoint(state.runningHubConnection.baseUrl);
+  const site = catalogRunningHubSite(state.runningHubConnection.baseUrl);
   let sites = catalogs.get(state.runningHubWorkflows);
   if (!sites) { sites = new Map(); catalogs.set(state.runningHubWorkflows, sites); }
   const kind = state.computeProvider === "runninghub" ? "app" : "workflow";
   const key = (selectionOnly ? kind + ":" : "execution:") + site;
   let entries = sites.get(key);
   if (!entries) {
-    entries = state.runningHubWorkflows.filter(w => w.runninghub && (!selectionOnly || (w.runninghub.kind ?? "workflow") === kind) && computeEndpoint(w.runninghub.baseUrl) === site);
+    entries = site ? state.runningHubWorkflows.filter(w => w.runninghub && (!selectionOnly || (w.runninghub.kind ?? "workflow") === kind)
+      && catalogRunningHubSite(w.runninghub.baseUrl) === site) : [];
     sites.set(key, entries);
   }
   return entries;
@@ -70,8 +79,8 @@ export function nodeComputeState<T extends ComputeState & { project: Project }>(
   let connection = state.runningHubConnection;
   if (isRunningHubProvider(computeProvider) && generation) {
     const definition = state.runningHubWorkflows.find(workflow => workflow.id === generation.workflowId);
-    if (definition?.runninghub && computeEndpoint(definition.runninghub.baseUrl) !== computeEndpoint(connection.baseUrl)) {
-      const site = runningHubSite(definition.runninghub.baseUrl);
+    const site = definition?.runninghub && catalogRunningHubSite(definition.runninghub.baseUrl);
+    if (site && site !== catalogRunningHubSite(connection.baseUrl)) {
       connection = state.runningHubConnections?.[site] ?? defaultRunningHubConnections[site];
     }
   }

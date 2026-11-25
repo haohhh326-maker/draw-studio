@@ -9,6 +9,9 @@ import { selectWorkflowOutput } from "../src/workflow/execution";
 import type { CanvasNode } from "../src/types";
 import type { ResolvedInput } from "../src/semantic/resolver";
 import type { ApiWorkflow } from "../src/types";
+import { detectWorkflowFormat } from "../src/workflow/import-editor";
+import { apiWorkflowSourceGraph } from "../src/workflow/import-api";
+import { parameterOptionKey } from "../src/runninghub/parameter-contract";
 
 const reader = async (request: AifisherWorkflowReadRequest) => await readAIFisherWorkflow(request) as AifisherWorkflowReadResult;
 const source: ApiWorkflow = {
@@ -52,6 +55,86 @@ describe("AIFISHER through the real local import pipeline", () => {
     expect(definition.parameters.find(parameter => parameter.key === "quality")).toMatchObject({ type: "boolean", default: true });
     expect(definition.inputSlots).toEqual([expect.objectContaining({ kind: "image", required: true })]);
     expect(definition.mapping).toEqual(expect.arrayContaining([expect.objectContaining({ semantic: "prompt", nodeId: "prompt", field: "prompt" })]));
+  });
+
+  it.each(["wrapped", "bare"] as const)("reads the %s API artifact with metadata and literal prompt/nodes IDs", async format => {
+    const graph = structuredClone(source);
+    graph.nodes = graph.frames;
+    delete graph.frames;
+    graph.saveVideo.inputs.images = ["nodes", 0];
+    graph.saveImage.inputs.images = ["nodes", 0];
+    graph.workflow = { class_type: "UnusedBranch", inputs: { weight: 0.5, arbitrary_setting: "retain a node with a reserved ID" } };
+    const metadata = { extra_data: { extra_pnginfo: { workflow: { version: 0.4, nodes: [], links: [] } } } };
+    const artifact = format === "wrapped" ? { prompt: graph, ...metadata } : { ...graph, ...metadata };
+    const original = structuredClone(artifact);
+    const prepared = await prepareWorkflowImport(artifact, "submission.json", info, reader);
+    expect(detectWorkflowFormat(artifact)).toBe("api");
+    expect(apiWorkflowSourceGraph(artifact)).toEqual(graph);
+    expect(prepared.importState.status).toBe("ready");
+    expect(prepared.graph).toEqual(graph);
+    expect(prepared.source).toEqual(original);
+    expect(convertLibraryWorkflow(prepared.config, prepared.graph, prepared.requirements, origin).template).toEqual(graph);
+  });
+
+  it("keeps distinct typed choices with equal display text through generation", async () => {
+    const choices = [1, "1", true, "true", "1:number"];
+    const graph = {
+      "1": { class_type: "TypedImage", inputs: { choice: 1 } },
+      "2": { class_type: "SaveImage", inputs: { images: ["1", 0], filename_prefix: "result" } },
+    };
+    const prepared = await prepareWorkflowImport(graph, "mixed-combo.json", { TypedImage: { input: { required: { choice: [choices] } }, output: ["IMAGE"] },
+      SaveImage: info.SaveImage }, reader);
+    expect(prepared.importState.status).toBe("ready");
+    const definition = convertLibraryWorkflow(prepared.config, prepared.graph, prepared.requirements, origin);
+    const parameter = definition.parameters.find(item => item.key === "choice")!;
+    expect(new Set(parameter.options).size).toBe(choices.length);
+    expect(parameter.options?.map(key => parameter.optionValues?.[key])).toEqual(choices);
+    expect(parameter.optionLabels?.[parameterOptionKey(parameter, 1)]).not.toBe(parameter.optionLabels?.[parameterOptionKey(parameter, "1")]);
+    for (const value of choices) {
+      const node = { data: { generation: { workflowId: definition.id, prompt: "", negativePrompt: "", params: { choice: value }, taskId: null } } } as CanvasNode;
+      expect(buildWorkflow(definition, node, [], {}).workflow["1"].inputs.choice).toBe(value);
+    }
+  });
+
+  it.each(["bare", "wrapped"] as const)("keeps distinct dotted targets, mixed enum types and both outputs in a %s API export", async format => {
+    const graph = structuredClone(source);
+    graph["镜头"] = { ...graph.frames, inputs: { ...graph.frames.inputs, "色彩.模式": 1 } };
+    graph["镜头.色彩"] = { class_type: "ColorPass", inputs: { "模式": "true", "图像": ["镜头", 0] } };
+    graph.saveVideo.inputs.images = ["镜头", 0];
+    graph.saveImage.inputs.images = ["镜头.色彩", 0];
+    graph.nodes = graph.disconnected;
+    delete graph.frames;
+    delete graph.disconnected;
+    const artifact = format === "wrapped" ? { prompt: graph, extra_data: { extra_pnginfo: { workflow: { nodes: [], links: [] } } } } : graph;
+    const choices = [1, "1", true, "true", "1:number"];
+    const objectInfo = { ...info,
+      OwnVideoFrames: { ...info.OwnVideoFrames, input: { required: { ...info.OwnVideoFrames.input.required, "色彩.模式": [choices] } } },
+      ColorPass: { input: { required: { "模式": [choices], "图像": ["IMAGE", { forceInput: true }] } }, output: ["IMAGE"] },
+    };
+    const original = structuredClone(artifact);
+    const prepared = await prepareWorkflowImport(artifact, "dotted-unicode-multi-output.json", objectInfo, reader);
+    expect(prepared.importState.status).toBe("ready");
+    expect(prepared.graph).toEqual(graph);
+    expect(prepared.source).toEqual(original);
+    const definition = convertLibraryWorkflow(prepared.config, prepared.graph, prepared.requirements, origin);
+    const first = definition.mapping.find(item => item.nodeId === "镜头" && item.field === "色彩.模式")!;
+    const second = definition.mapping.find(item => item.nodeId === "镜头.色彩" && item.field === "模式")!;
+    expect(first.semantic).not.toBe(second.semantic);
+    expect([definition.output, ...(definition.additionalOutputs ?? [])].map(output => output.nodeId).sort()).toEqual(["saveImage", "saveVideo"]);
+    for (const [firstValue, secondValue] of [["1", true], [1, "true"], ["1:number", 1]]) {
+      const node = { data: { generation: { workflowId: definition.id, prompt: "用户的提示词", negativePrompt: "", params: {
+        [first.semantic]: firstValue, [second.semantic]: secondValue,
+      }, taskId: null } } } as CanvasNode;
+      const references = [{ semantic: "slot:input1", asset: { id: "asset", name: "ref.png", kind: "image" } }] as ResolvedInput[];
+      const expected = structuredClone(graph);
+      expected["镜头"].inputs["色彩.模式"] = firstValue;
+      expected["镜头.色彩"].inputs["模式"] = secondValue;
+      expected.prompt.inputs.prompt = "用户的提示词";
+      expected.load.inputs.image = "uploaded-reference.png";
+      expect(buildWorkflow(definition, node, references, { asset: "uploaded-reference.png" }).workflow).toEqual(expected);
+    }
+    expect(definition.template).toEqual(graph);
+    expect(artifact).toEqual(original);
   });
 
   it("projects known output media while keeping wildcard receipt collection and mixed output classification", async () => {
@@ -102,6 +185,43 @@ describe("AIFISHER through the real local import pipeline", () => {
     const definition = convertLibraryWorkflow(prepared.config, prepared.graph, prepared.requirements, origin);
     expect(definition.template).toEqual(expected);
     expect(prepared.source).toEqual(ui);
+  });
+
+  it("keeps pending editor variants separate while the same linked source compiles against its matching schema", async () => {
+    const editor = { version: 0.4, nodes: [
+      { id: 1, type: "LoadImage", pos: [0, 0], inputs: [], outputs: [{ name: "IMAGE", type: "IMAGE", links: [11, 12] }], widgets_values: { image: "original.png" } },
+      { id: 2, type: "SaveImage", pos: [300, 0], inputs: [{ name: "images", type: "IMAGE", link: 11 }], outputs: [], widgets_values: { filename_prefix: "原图" } },
+      { id: 3, type: "CustomVideoPublisher", pos: [300, 250], inputs: [{ name: "素材", type: "IMAGE", link: 12 }], outputs: [],
+        widgets_values: { "导出.模式": 1, "注释": "原始控件" } },
+    ], links: [[11, 1, 0, 2, 0, "IMAGE"], [12, 1, 0, 3, 0, "IMAGE"]] };
+    const original = structuredClone(editor);
+    const inherited = { LoadImage: info.LoadImage, SaveImage: info.SaveImage };
+    const publisher = (type: string) => ({ input: { required: {
+      "素材": [type, { forceInput: true }], "导出.模式": [[1, "1", true, "true"]], "注释": ["STRING"],
+    } }, output: [], output_node: true });
+    const [unavailable, missing, incompatible, ready] = await Promise.all([
+      prepareWorkflowImport(editor, "named-editor.json", undefined, reader),
+      prepareWorkflowImport(editor, "named-editor.json", inherited, reader),
+      prepareWorkflowImport(editor, "named-editor.json", { ...inherited, CustomVideoPublisher: publisher("LATENT") }, reader),
+      prepareWorkflowImport(editor, "named-editor.json", { ...inherited, CustomVideoPublisher: publisher("IMAGE") }, reader),
+    ]);
+    for (const pending of [unavailable, missing, incompatible]) {
+      expect(pending.importState.status).toBe("pending");
+      expect(pending.source).toEqual(original);
+      expect(pending.graph).toBeUndefined();
+    }
+    expect(unavailable.importState.diagnostics).toEqual(expect.arrayContaining([expect.objectContaining({ code: "OBJECT_INFO_REQUIRED" })]));
+    expect(missing.importState.diagnostics).toEqual(expect.arrayContaining([expect.objectContaining({ nodeId: "3", classType: "CustomVideoPublisher" })]));
+    expect(incompatible.importState.diagnostics).toEqual(expect.arrayContaining([expect.objectContaining({ nodeId: "3" })]));
+    expect(ready.importState.status).toBe("ready");
+    expect(ready.graph).toEqual({
+      "1": { class_type: "LoadImage", inputs: { image: "original.png" }, _meta: { title: "LoadImage" } },
+      "2": { class_type: "SaveImage", inputs: { images: ["1", 0], filename_prefix: "原图" }, _meta: { title: "SaveImage" } },
+      "3": { class_type: "CustomVideoPublisher", inputs: { "素材": ["1", 0], "导出.模式": 1, "注释": "原始控件" }, _meta: { title: "CustomVideoPublisher" } },
+    });
+    expect(ready.analysis.outputs.map(output => output.nodeId).sort()).toEqual(["2", "3"]);
+    expect(ready.source).toEqual(original);
+    expect(editor).toEqual(original);
   });
 
   it("keeps source branches and authored output settings when only explicit user inputs are applied at runtime", async () => {

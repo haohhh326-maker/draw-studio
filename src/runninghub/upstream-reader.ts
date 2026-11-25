@@ -5,6 +5,7 @@ import { declaredWorkflowCategory } from "./classification";
 import type { AifisherRawParameterBinding, AifisherParameterBindingDto, AifisherWorkflowReadResult } from "../workflow/aifisher-reader-client";
 import { aifisherCanvasBindingCandidates, assertAifisherVariableAssetsSupported } from "../workflow/aifisher-variable-assets";
 import { aifisherExternalAssetCandidate, aifisherOutputBindingAllowed, aifisherPublishedOutputCandidates } from "../workflow/aifisher-io-contracts";
+import { runningHubFieldKey } from "./import-review";
 
 type Candidate = { nodeId: string; fieldName: string; nodeTitle?: string; value: unknown; control?: string; valueType?: string; mediaKind?: string | null; required?: boolean; options?: unknown[] | null; minimum?: number | null; maximum?: number | null; step?: number | null; modelKind?: string | null };
 type PlannedOutput = { nodeId: string; title?: string; classType?: string; outputTypes?: string[] };
@@ -23,7 +24,10 @@ export type RunningHubReaderResult = {
   nodeDefinitions?: Record<string, unknown>;
   nodeDefinitionEvidence?: Record<string, { outputNode?: boolean }>;
   category?: "image" | "video" | "audio" | "motion";
-  projection?: { snapshot: { appName: string; categoryId: string; fields: { nodeId: string; fieldName: string; kind: string; label: string }[] } };
+  projection?: { snapshot: { appName: string; categoryId: string; fields: {
+    nodeId: string; fieldName: string; kind: string; label: string;
+    minimum?: number | null; maximum?: number | null; step?: number | null;
+  }[] } };
 };
 
 const scalar = (value: unknown): value is string | number | boolean => typeof value === "string" || typeof value === "boolean" || typeof value === "number" && Number.isFinite(value);
@@ -107,22 +111,29 @@ export function buildRunningHubUpstream(reader: RunningHubReaderResult, options:
   if (media.some(input => !analysis.inputs.some(candidate => candidate.nodeId === input.nodeId && candidate.field === input.field && candidate.kind === input.kind)))
     throw new Error("素材输入必须来自 AIFISHER 公开的外部素材输入合同。");
   const used = new Set<string>();
-  const target = (nodeId: string, field: string) => JSON.stringify([nodeId, field]);
-  const promptKey = options.promptKey ?? (analysis.prompts[0] ? analysis.prompts[0].nodeId + "." + analysis.prompts[0].field : "");
-  if (promptKey && !analysis.prompts.some(prompt => prompt.nodeId + "." + prompt.field === promptKey))
-    throw new Error("主提示词必须绑定 AIFISHER 公开的文本参数。");
-  for (const candidate of reader.bindingCandidates) if (promptKey && candidate.nodeId + "." + candidate.fieldName === promptKey) {
-    mapping.push({ semantic: "prompt", nodeId: candidate.nodeId, field: candidate.fieldName }); used.add(target(candidate.nodeId, candidate.fieldName));
+  const promptKey = options.promptKey;
+  let prompt = promptKey === undefined ? analysis.prompts[0] : undefined;
+  if (promptKey) {
+    prompt = analysis.prompts.find(field => runningHubFieldKey(field.nodeId, field.field) === promptKey);
+    if (!prompt) {
+      const previousChoices = analysis.prompts.filter(field => field.nodeId + "." + field.field === promptKey);
+      if (previousChoices.length !== 1) throw new Error("主提示词必须绑定 AIFISHER 公开的唯一文本参数。");
+      prompt = previousChoices[0];
+    }
+  }
+  if (prompt) {
+    mapping.push({ semantic: "prompt", nodeId: prompt.nodeId, field: prompt.field });
+    used.add(runningHubFieldKey(prompt.nodeId, prompt.field));
   }
   media.forEach((input, index) => {
-    if (used.has(target(input.nodeId, input.field))) throw new Error("主提示词与素材输入存在重复绑定。");
-    const semantic = "slot:input" + (index + 1); used.add(target(input.nodeId, input.field));
+    if (used.has(runningHubFieldKey(input.nodeId, input.field))) throw new Error("主提示词与素材输入存在重复绑定。");
+    const semantic = "slot:input" + (index + 1); used.add(runningHubFieldKey(input.nodeId, input.field));
     mapping.push({ semantic, nodeId: input.nodeId, field: input.field });
     slots.push({ semantic, label: input.label || input.field, kind: input.kind, required: input.required === true });
   });
   for (const binding of [...reader.parameterBindings].sort((a, b) => a.presentation.order - b.presentation.order)) {
     const { nodeId, fieldName, expectedValueType } = binding.target;
-    if (used.has(target(nodeId, fieldName)) || binding.control.kind === "asset") continue;
+    if (used.has(runningHubFieldKey(nodeId, fieldName)) || binding.control.kind === "asset") continue;
     const published = reader.parameterBindingDto.bindings.find(item => item.id === binding.id);
     if (!published) throw new Error("AIFISHER 参数控件缺少显示配置：" + fieldName);
     const control = binding.control, key = binding.key;
@@ -146,8 +157,13 @@ export function buildRunningHubUpstream(reader: RunningHubReaderResult, options:
       parameter.optionLabels = Object.fromEntries(published.control.options.map(option => [option.id, option.label]));
       parameter.optionValues = Object.fromEntries(published.control.options.map((option, index) => [option.id, control.options![index]]));
     }
-    for (const [source, dest] of [["minimum", "min"], ["maximum", "max"], ["step", "step"]] as const)
-      if (typeof control[source] === "number" && Number.isFinite(control[source])) parameter[dest] = control[source];
+    // The WebApp snapshot retains published bounds even when the generated
+    // numeric node's capabilities omit them.
+    const projected = reader.projection?.snapshot.fields.find(field => field.nodeId === nodeId && field.fieldName === fieldName);
+    for (const [source, dest] of [["minimum", "min"], ["maximum", "max"], ["step", "step"]] as const) {
+      const bound = control[source] ?? projected?.[source];
+      if (typeof bound === "number" && Number.isFinite(bound)) parameter[dest] = bound;
+    }
     if (control.kind === "textarea") parameter.multiline = true;
     if (candidate?.modelKind) parameter.model = true;
     parameters.push(parameter); mapping.push({ semantic: key, nodeId, field: fieldName });

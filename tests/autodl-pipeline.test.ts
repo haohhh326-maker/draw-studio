@@ -227,6 +227,15 @@ describe("AutoDL instance leases around canvas generation", () => {
     expect(release).not.toHaveBeenCalled();
   });
 
+  it("routes a legacy unmarked AutoDL card through power and readiness before making a ComfyUI request", async () => {
+    const endpoint = "https://u42-abcd1234.westd.seetacloud.com:8443";
+    useStore.setState({ connection: { ...cloud, baseUrl: endpoint, autodl: undefined } });
+    await generate("canvas", "node");
+    expect(fixture.acquire).toHaveBeenCalledWith(expect.objectContaining({ baseUrl: endpoint }), expect.any(Object));
+    expect(fixture.events).toEqual(["acquire", "healthy", "connect", "upload", "submit", "complete", "download", "import", "release"]);
+    expect(currentTask().status).toBe("completed");
+  });
+
   it.each(["health", "connect", "upload", "submit", "wait", "download"] as const)("halts the %s operation when the lease is lost without treating it as user cancellation", async stage => {
     const reached = vi.fn();
     if (stage === "health") vi.mocked(ComfyUIClient.prototype.json).mockImplementation(async (_path, init) => { reached(); return pendingAbort(init?.signal ?? undefined); });

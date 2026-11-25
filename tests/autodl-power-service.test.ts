@@ -1,11 +1,10 @@
-import { EventEmitter } from "node:events";
-import type { request as HTTPSRequest } from "node:https";
 import fs from "node:fs/promises";
 import { mkdir, mkdtemp, readFile, realpath, rm, stat, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { createAutoDLPlatform, createAutoDLPowerService, type AutoDLPlatform, type AutoDLPowerService } from "../scripts/autodl-power-service";
+import { AutoDLBridgeError } from "../scripts/autodl-extension-broker";
 
 const roots: string[] = [], services: AutoDLPowerService[] = [];
 const settings = { enabled: true, endpoint: "https://comfy.fixture.invalid/comfy", instanceUuid: "pro-fixture123", apiToken: "fixture-private-developer-token" };
@@ -18,18 +17,20 @@ async function until(check: () => boolean) {
   for (let index = 0; index < 500 && !check(); index++) await new Promise<void>(resolve => setTimeout(resolve, 2));
   expect(check()).toBe(true);
 }
-async function fixture(options: { root?: string; platform?: AutoDLPlatform; now?: () => number; automaticTimer?: boolean; retryMs?: number } = {}) {
+async function fixture(options: { root?: string; platform?: AutoDLPlatform; now?: () => number; automaticTimer?: boolean; retryMs?: number; bootSettleMs?: number } = {}) {
   const root = options.root ?? await rootFixture();
   let power = "shutdown";
+  let revision = 0;
   const platform = {
     status: vi.fn(async (_credentials: { apiToken: string; instanceUuid: string }) => power),
     powerOn: vi.fn(async (_credentials: { apiToken: string; instanceUuid: string }) => { power = "running"; }),
     powerOff: vi.fn(async (_credentials: { apiToken: string; instanceUuid: string }) => { power = "shutdown"; }),
+    revision: () => revision,
   };
-  const service = createAutoDLPowerService(root, { platform: options.platform ?? platform, automaticTimer: false, ...options });
+  const service = createAutoDLPowerService(root, { platform: options.platform ?? platform, automaticTimer: false, bootSettleMs: 0, ...options });
   services.push(service);
   await service.saveSettings(settings);
-  return { root, service, platform, setPower: (value: string) => { power = value; } };
+  return { root, service, platform, setPower: (value: string) => { power = value; }, changePairing: () => { revision++; } };
 }
 afterEach(async () => {
   vi.restoreAllMocks();
@@ -41,52 +42,242 @@ afterEach(async () => {
   }
 });
 
-describe("AutoDL platform transport", () => {
-  function transport(packets: unknown[] = [{ code: "Success", data: "running" }, { code: "Success", data: null }, { code: "Success", data: null }]) {
-    const calls: { url: URL; options: any; body: string; timeout?: number }[] = [];
-    const requester = ((url: URL, options: unknown, callback: (response: EventEmitter) => void) => {
-      const request = new EventEmitter() as EventEmitter & { setTimeout: (timeout: number, fn: () => void) => void; end: (body: Buffer) => void; destroy: (error?: Error) => void };
-      const call = { url, options, body: "", timeout: 0 }; calls.push(call);
-      request.setTimeout = timeout => { call.timeout = timeout; };
-      request.destroy = error => { request.emit("error", error); };
-      request.end = body => {
-        call.body = body.toString("utf8");
-        queueMicrotask(() => {
-          const response = new EventEmitter() as EventEmitter & { statusCode: number; destroy: (error: Error) => void };
-          response.statusCode = 200; response.destroy = error => { response.emit("error", error); };
-          callback(response);
-          response.emit("data", Buffer.from(JSON.stringify(packets.shift()))); response.emit("end");
-        });
-      };
-      return request;
-    }) as unknown as typeof HTTPSRequest;
-    return { calls, api: createAutoDLPlatform(requester) };
-  }
-  it("uses only the official host, raw Authorization and the documented GET JSON status body", async () => {
-    const { api, calls } = transport();
-    expect(await api.status(settings)).toBe("running");
-    await api.powerOn(settings); await api.powerOff(settings);
-    expect(calls.map(call => call.url.href)).toEqual(["status", "power_on", "power_off"].map(route => "https://www.autodl.art/api/v1/adl_dev/dev/instance/pro/" + route));
-    expect(calls.map(call => call.options.method)).toEqual(["GET", "POST", "POST"]);
-    expect(calls.map(call => JSON.parse(call.body))).toEqual([{ instance_uuid: settings.instanceUuid }, { instance_uuid: settings.instanceUuid, payload: "gpu" }, { instance_uuid: settings.instanceUuid }]);
-    for (const call of calls) {
-      expect(call.options.headers.Authorization).toBe(settings.apiToken);
-      expect(call.options.headers["Content-Length"]).toBe(Buffer.byteLength(call.body));
-    }
-    expect(JSON.stringify(calls)).not.toContain("force");
-    expect(calls.every(call => !call.url.pathname.endsWith("/release"))).toBe(true);
-  });
-  it("does not expose an echoed developer token from a rejected platform response", async () => {
-    const { api } = transport([{ code: "Denied", msg: `invalid ${settings.apiToken}` }]);
-    await expect(api.status(settings)).rejects.toThrow("invalid [已隐藏]");
-  });
-  it("requires the actual string status rather than treating a success packet as a power state", async () => {
-    const { api } = transport([{ code: "Success", data: null }]);
-    await expect(api.status(settings)).rejects.toThrow("状态无效");
+describe("AutoDL extension platform adapter", () => {
+  it("passes only the allowlisted command and exact UUID, never a developer or website credential", async () => {
+    const broker = { call: vi.fn(async () => ({ status: "running" })), revision: () => 2 };
+    const api = createAutoDLPlatform(broker);
+    expect(await api.status(settings)).toBe("running"); await api.powerOn(settings); await api.powerOff(settings);
+    expect(broker.call.mock.calls).toEqual([["status", settings.instanceUuid], ["power-on", settings.instanceUuid], ["power-off", settings.instanceUuid]]);
+    expect(JSON.stringify(broker.call.mock.calls)).not.toContain(settings.apiToken); expect(api.revision?.()).toBe(2);
   });
 });
 
 describe("durable AutoDL task leases", () => {
+  it("reports the wallet preflight refusal and starts a new attempt once funds are available", async () => {
+    const message = "AutoDL.Art 账户可用余额不足以开机。";
+    const checkStartup = vi.fn(async () => "shutdown")
+      .mockRejectedValue(new AutoDLBridgeError(message, 502, "INSUFFICIENT_BALANCE", false, true));
+    const platform = {
+      status: vi.fn(async () => "shutdown"),
+      checkStartup,
+      powerOn: vi.fn(async () => { platform.status.mockResolvedValue("running"); }),
+      powerOff: vi.fn(async () => {}),
+    };
+    const { service } = await fixture({ platform });
+    expect(await service.check()).toMatchObject({ phase: "off", message, pendingStop: false });
+    const blocked = await service.acquire(input());
+    await service.tick();
+    expect(await service.heartbeat(blocked.leaseId)).toMatchObject({ phase: "failed", error: message });
+    expect(await service.status()).toMatchObject({ phase: "off", activeTasks: 0, pendingStop: false });
+    expect(platform.powerOn).not.toHaveBeenCalled();
+    expect(platform.powerOff).not.toHaveBeenCalled();
+
+    checkStartup.mockReset().mockResolvedValue("shutdown");
+    expect(await service.check()).toMatchObject({ phase: "off", message: expect.stringContaining("开机预检通过") });
+    expect(platform.powerOn).not.toHaveBeenCalled();
+    const retried = await service.acquire(input("task-one", "attempt-two"));
+    await service.tick();
+    expect(await service.heartbeat(retried.leaseId)).toMatchObject({ phase: "ready" });
+    expect(platform.powerOn).toHaveBeenCalledOnce();
+  });
+  it("uses the newer instance state from preflight to avoid sending a redundant boot request", async () => {
+    const platform = {
+      status: vi.fn(async () => "shutdown"),
+      checkStartup: vi.fn(async () => "running"),
+      powerOn: vi.fn(async () => {}),
+      powerOff: vi.fn(async () => {}),
+    };
+    const { service } = await fixture({ platform });
+    const lease = await service.acquire(input());
+    await service.tick();
+    expect(await service.heartbeat(lease.leaseId)).toMatchObject({ phase: "ready" });
+    expect(platform.checkStartup).toHaveBeenCalledWith({ ...settings, apiToken: "" });
+    expect(platform.powerOn).not.toHaveBeenCalled();
+  });
+  it("does not clear uncertain startup cleanup after only one early shutdown observation", async () => {
+    let now = 1000;
+    const { service, platform, setPower } = await fixture({ now: () => now, bootSettleMs: 60_000 });
+    platform.powerOn.mockRejectedValue(new AutoDLBridgeError("Lost delivered command", 504, "COMMAND_TIMEOUT", true));
+    const lease = await service.acquire(input()); await service.tick();
+    expect((await service.heartbeat(lease.leaseId)).phase).toBe("failed"); expect((await service.status()).pendingStop).toBe(true);
+    platform.powerOff.mockResolvedValue(undefined); now += 10_000; setPower("starting"); await service.tick();
+    expect((await service.status()).pendingStop).toBe(true);
+    setPower("shutdown"); await service.tick(); expect((await service.status()).pendingStop).toBe(false);
+    expect(platform.powerOn).toHaveBeenCalledTimes(1); expect(platform.powerOff.mock.calls.length).toBeGreaterThanOrEqual(3);
+  });
+  it("bounds uncertain-start observation without delaying the first power-off request", async () => {
+    let now = 1000;
+    const { service, platform } = await fixture({ now: () => now, bootSettleMs: 60_000 });
+    platform.powerOn.mockRejectedValue(new AutoDLBridgeError("Lost delivered command", 504, "COMMAND_TIMEOUT", true));
+    await service.acquire(input()); await service.tick(); expect(platform.powerOff).toHaveBeenCalledTimes(1);
+    now += 59_999; await service.tick(); expect((await service.status()).pendingStop).toBe(true);
+    now += 2; await service.tick(); expect((await service.status()).pendingStop).toBe(false);
+    expect(platform.powerOn).toHaveBeenCalledTimes(1);
+  });
+  it.each([
+    new AutoDLBridgeError("Not delivered", 504, "COMMAND_TIMEOUT", false),
+    new AutoDLBridgeError("Explicit rejection", 502, "POWER_REJECTED", true, true),
+    new AutoDLBridgeError("Expired before submission", 502, "COMMAND_EXPIRED", false, true),
+  ])("does not retain a boot obligation for an operation known to have no power effect %#", async failure => {
+    const { service, platform } = await fixture({ bootSettleMs: 60_000 }); platform.powerOn.mockRejectedValue(failure);
+    const lease = await service.acquire(input()); await service.tick();
+    expect((await service.heartbeat(lease.leaseId)).phase).toBe("failed"); expect((await service.status()).pendingStop).toBe(false); expect(platform.powerOff).not.toHaveBeenCalled();
+  });
+  it.each(["starting", "running"])("reconciles a rejected state-conflict against real %s without replaying power-on", async actual => {
+    const { service, platform, setPower } = await fixture({ bootSettleMs: 60_000 });
+    platform.powerOn.mockImplementation(async () => { setPower(actual); throw new AutoDLBridgeError("State changed", 502, "POWER_STATE_CONFLICT", true); });
+    const lease = await service.acquire(input()); await service.tick();
+    expect((await service.heartbeat(lease.leaseId)).phase).toBe(actual === "running" ? "ready" : "starting");
+    setPower("running"); await service.tick(); expect((await service.heartbeat(lease.leaseId)).phase).toBe("ready");
+    expect(platform.powerOn).toHaveBeenCalledTimes(1); expect(platform.powerOff).not.toHaveBeenCalled();
+    await service.release(lease.leaseId); await service.tick(); expect(platform.powerOff).toHaveBeenCalledTimes(1);
+  });
+  it.each([["POWER_UNKNOWN", "shutdown"], ["POWER_STATE_CONFLICT", "shutdown_by_starting_error"]])("waits for reported startup after %s while %s is stale", async (code, staleStatus) => {
+    let now = 1000;
+    const { service, platform, setPower } = await fixture({ now: () => now, bootSettleMs: 60_000 });
+    setPower(staleStatus);
+    platform.powerOn.mockRejectedValue(new AutoDLBridgeError("Unconfirmed platform result", 502, code, true));
+    const first = await service.acquire(input()); await service.tick();
+    const second = await service.acquire(input("task-two", "attempt-two"));
+    expect(second).toMatchObject({ phase: "starting", message: expect.stringContaining("正在核对 AutoDL 开机状态") });
+    expect(await service.heartbeat(first.leaseId)).toMatchObject({ phase: "starting", message: second.message });
+    expect(await service.status()).toMatchObject({ phase: "starting", activeTasks: 2, pendingStop: false });
+    now += 10_000; setPower("starting"); await service.tick();
+    expect(await service.heartbeat(first.leaseId)).toMatchObject({ phase: "starting" });
+    expect(await service.heartbeat(first.leaseId)).not.toHaveProperty("message");
+    now += 10_000; setPower("running"); await service.tick();
+    expect(await service.heartbeat(first.leaseId)).toMatchObject({ phase: "ready" });
+    expect(await service.heartbeat(second.leaseId)).toMatchObject({ phase: "ready" });
+    expect(platform.powerOn).toHaveBeenCalledTimes(1); expect(platform.powerOff).not.toHaveBeenCalled();
+  });
+  it("records a confirmed shutdown after the reconciliation window without sending power-off", async () => {
+    let now = 1000;
+    const { service, platform, root } = await fixture({ now: () => now, bootSettleMs: 60_000 });
+    platform.powerOn.mockRejectedValue(new AutoDLBridgeError("Unconfirmed platform result", 502, "POWER_UNKNOWN", true, false, { remoteCode: "BadRequest", httpStatus: 200 }));
+    const lease = await service.acquire(input()); await service.tick();
+    now += 59_000; await service.tick();
+    expect(await service.heartbeat(lease.leaseId)).toMatchObject({ phase: "starting" });
+    now += 1_000; await service.tick();
+    expect(await service.heartbeat(lease.leaseId)).toMatchObject({ phase: "failed", error: expect.stringContaining("平台仍显示关机（平台码 BadRequest，HTTP 200）") });
+    expect(await service.status()).toMatchObject({ phase: "off", pendingStop: false, activeTasks: 0 });
+    expect(JSON.parse(await readFile(stateFile(root), "utf8"))).not.toHaveProperty("bootVerification");
+    expect(platform.powerOn).toHaveBeenCalledTimes(1); expect(platform.powerOff).not.toHaveBeenCalled();
+  });
+  it("resumes an interrupted startup verification without sending another power-on", async () => {
+    let now = 1000;
+    const first = await fixture({ now: () => now, bootSettleMs: 60_000 });
+    first.platform.powerOn.mockRejectedValue(new AutoDLBridgeError("Unconfirmed platform result", 502, "POWER_UNKNOWN", true));
+    await first.service.acquire(input()); await first.service.tick(); await first.service.close();
+    const restored = createAutoDLPowerService(first.root, { platform: first.platform, now: () => now, automaticTimer: false }); services.push(restored);
+    await restored.tick();
+    const lease = await restored.acquire(input()); await restored.tick();
+    expect(lease).toMatchObject({ phase: "starting", message: expect.stringContaining("正在核对 AutoDL 开机状态") });
+    now += 10_000; first.setPower("running"); await restored.tick();
+    expect(await restored.heartbeat(lease.leaseId)).toMatchObject({ phase: "ready" });
+    expect(first.platform.powerOn).toHaveBeenCalledTimes(1); expect(first.platform.powerOff).not.toHaveBeenCalled();
+  });
+  it("refreshes an off snapshot requested before the deadline if its response arrives after it", async () => {
+    let now = 1000;
+    const { service, platform, setPower } = await fixture({ now: () => now, bootSettleMs: 60_000 });
+    platform.powerOn.mockRejectedValue(new AutoDLBridgeError("Unconfirmed platform result", 502, "POWER_UNKNOWN", true));
+    const lease = await service.acquire(input()); await service.tick();
+    now += 59_999;
+    platform.status.mockImplementationOnce(async () => { now += 2; setPower("running"); return "shutdown"; });
+    await service.tick();
+    expect(await service.heartbeat(lease.leaseId)).toMatchObject({ phase: "ready" });
+    expect(platform.powerOn).toHaveBeenCalledTimes(1); expect(platform.powerOff).not.toHaveBeenCalled();
+  });
+  it("keeps a cleanup obligation when startup status remains unreadable through the reconciliation deadline", async () => {
+    let now = 1000;
+    const { service, platform } = await fixture({ now: () => now, bootSettleMs: 60_000 });
+    platform.status.mockResolvedValueOnce("shutdown");
+    platform.status.mockRejectedValue(new Error("Status unavailable"));
+    platform.powerOn.mockRejectedValue(new AutoDLBridgeError("Unconfirmed platform result", 502, "POWER_UNKNOWN", true));
+    const lease = await service.acquire(input()); await service.tick();
+    expect(await service.heartbeat(lease.leaseId)).toMatchObject({ phase: "starting" });
+    expect(platform.powerOff).not.toHaveBeenCalled();
+    now += 60_000; await service.tick();
+    expect(await service.heartbeat(lease.leaseId)).toMatchObject({ phase: "failed", error: expect.stringContaining("开机核对超时") });
+    expect(await service.status()).toMatchObject({ phase: "stopping", pendingStop: true, activeTasks: 0 });
+    expect(platform.powerOn).toHaveBeenCalledTimes(1); expect(platform.powerOff).toHaveBeenCalled();
+  });
+  it("waits 30 seconds between at most two confirmed-capacity retries, sharing the attempt with concurrent leases", async () => {
+    let now = 1000;
+    const { service, platform, setPower, root } = await fixture({ now: () => now });
+    platform.powerOn.mockImplementation(async () => {
+      if (platform.powerOn.mock.calls.length <= 2) throw new AutoDLBridgeError("No inventory", 502, "NO_GPU_CAPACITY", true, true);
+      setPower("running");
+    });
+    const first = await service.acquire(input()); await service.tick();
+    expect(await service.heartbeat(first.leaseId)).toMatchObject({ phase: "starting", message: expect.stringContaining("暂无库存") });
+    const second = await service.acquire(input("task-two", "attempt-two"));
+    expect(second).toMatchObject({ phase: "starting", message: expect.stringContaining("暂无库存") });
+    expect(JSON.parse(await readFile(stateFile(root), "utf8"))).toMatchObject({ capacityRetryCount: 1, capacityRetryAt: 31_000, powerOwned: false });
+    now += 29_999; await service.tick(); expect(platform.powerOn).toHaveBeenCalledTimes(1);
+    now++; await service.tick(); expect(platform.powerOn).toHaveBeenCalledTimes(2);
+    now += 30_000; await service.tick(); expect(platform.powerOn).toHaveBeenCalledTimes(3);
+    expect(await service.heartbeat(first.leaseId)).toMatchObject({ phase: "ready" }); expect(await service.heartbeat(second.leaseId)).toMatchObject({ phase: "ready" });
+    expect(await service.heartbeat(first.leaseId)).not.toHaveProperty("message");
+    await service.release(first.leaseId); await service.tick(); expect(platform.powerOff).not.toHaveBeenCalled();
+    await service.release(second.leaseId); await service.tick(); expect(platform.powerOff).toHaveBeenCalledTimes(1);
+    expect(JSON.parse(await readFile(stateFile(root), "utf8"))).not.toHaveProperty("capacityRetryAt");
+  });
+  it("ends the current leases after three explicit inventory rejections without later background startup", async () => {
+    let now = 1000;
+    const { service, platform } = await fixture({ now: () => now });
+    platform.powerOn.mockRejectedValue(new AutoDLBridgeError("No inventory", 502, "NO_GPU_CAPACITY", true, true));
+    const lease = await service.acquire(input()); await service.tick();
+    now += 30_000; await service.tick(); now += 30_000; await service.tick();
+    expect(await service.heartbeat(lease.leaseId)).toMatchObject({ phase: "failed", error: expect.stringContaining("已完成 2 次重试") });
+    now += 30_000; await service.tick(); expect(platform.powerOn).toHaveBeenCalledTimes(3);
+    expect(await service.status()).toMatchObject({ activeTasks: 0, pendingStop: false }); expect(platform.powerOff).not.toHaveBeenCalled();
+  });
+  it.each(["shutting_down", "query-failed"])("does not schedule capacity retries without a confirmed off state: %s", async actual => {
+    let now = 1000;
+    const { service, platform } = await fixture({ now: () => now });
+    platform.status.mockImplementationOnce(async () => "shutdown");
+    platform.status.mockImplementation(async () => { if (actual === "query-failed") throw new Error("Status unavailable"); return actual; });
+    platform.powerOn.mockRejectedValue(new AutoDLBridgeError("No inventory", 502, "NO_GPU_CAPACITY", true, true));
+    const lease = await service.acquire(input()); await service.tick(); now += 60_000; await service.tick();
+    expect((await service.heartbeat(lease.leaseId)).phase).toBe("failed"); expect(platform.powerOn).toHaveBeenCalledTimes(1);
+  });
+  it("cancels a capacity wait even when the due retry has a read-only status query in flight", async () => {
+    let now = 1000;
+    const { service, platform } = await fixture({ now: () => now });
+    platform.powerOn.mockRejectedValue(new AutoDLBridgeError("No inventory", 502, "NO_GPU_CAPACITY", true, true));
+    const lease = await service.acquire(input()); await service.tick();
+    const delayed = deferredValue<string>(); platform.status.mockImplementationOnce(async () => delayed.promise);
+    now += 30_000; const retry = service.tick(); await until(() => platform.status.mock.calls.length === 3);
+    await service.release(lease.leaseId); delayed.resolve("shutdown"); await retry; now += 60_000; await service.tick();
+    expect(platform.powerOn).toHaveBeenCalledTimes(1); expect(platform.powerOff).not.toHaveBeenCalled();
+    expect(await service.status()).toMatchObject({ activeTasks: 0, pendingStop: false });
+  });
+  it("restores the capacity retry deadline only after the interrupted task explicitly resumes", async () => {
+    let now = 1000;
+    const first = await fixture({ now: () => now });
+    first.platform.powerOn.mockRejectedValueOnce(new AutoDLBridgeError("No inventory", 502, "NO_GPU_CAPACITY", true, true));
+    await first.service.acquire(input()); await first.service.tick(); await first.service.close();
+    const restored = createAutoDLPowerService(first.root, { platform: first.platform, now: () => now, automaticTimer: false }); services.push(restored);
+    await restored.tick(); expect(first.platform.powerOn).toHaveBeenCalledTimes(1);
+    const lease = await restored.acquire(input()); await restored.tick(); expect(lease).toMatchObject({ phase: "starting", message: expect.stringContaining("暂无库存") });
+    expect(first.platform.powerOn).toHaveBeenCalledTimes(1);
+    now += 30_000; await restored.tick(); expect(first.platform.powerOn).toHaveBeenCalledTimes(2);
+    expect((await restored.heartbeat(lease.leaseId)).phase).toBe("ready");
+  });
+  it("rejects a mismatched instance ID encoded in a recognizable official AutoDL endpoint", async () => {
+    const { service, platform } = await fixture();
+    await expect(service.saveSettings({ enabled: true, endpoint: "https://u123-abc123.westd.seetacloud.com:8443/comfy", instanceUuid: "pro-different" })).rejects.toThrow("不一致");
+    await service.saveSettings({ enabled: true, endpoint: "https://u123-abc123.westd.seetacloud.com:8443/comfy", instanceUuid: "pro-abc123" });
+    expect(platform.status).not.toHaveBeenCalled();
+  });
+  it("scrubs a legacy developer credential on load without using it for any platform request", async () => {
+    const first = await fixture(); await first.service.close();
+    const saved = JSON.parse(await readFile(stateFile(first.root), "utf8")); saved.settings.apiToken = settings.apiToken;
+    await writeFile(stateFile(first.root), JSON.stringify(saved));
+    const restored = createAutoDLPowerService(first.root, { platform: first.platform, automaticTimer: false }); services.push(restored);
+    expect((await restored.status()).settings.tokenConfigured).toBe(false);
+    expect(JSON.parse(await readFile(stateFile(first.root), "utf8")).settings.apiToken).toBe(""); expect(first.platform.status).not.toHaveBeenCalled();
+  });
   it("rechecks the lease inside the boot checkpoint after an earlier release write commits", async () => {
     const { service, platform, root } = await fixture();
     const observed = deferredValue<string>(), commit = deferred();
@@ -131,41 +322,31 @@ describe("durable AutoDL task leases", () => {
     expect((await service.heartbeat(current.leaseId)).phase).toBe("starting");
     expect(platform.powerOn).not.toHaveBeenCalled();
     replacement.resolve("shutdown"); await service.tick();
-    expect(platform.powerOn).toHaveBeenCalledExactlyOnceWith(expect.objectContaining({ instanceUuid: binding.instanceUuid, apiToken: binding.apiToken }));
+    expect(platform.powerOn).toHaveBeenCalledExactlyOnceWith(expect.objectContaining({ instanceUuid: binding.instanceUuid, apiToken: "" }));
     expect((await service.heartbeat(current.leaseId)).phase).toBe("ready");
   });
-  it("ignores an old token's ready response until the corrected token has queried the instance", async () => {
-    const { service, platform } = await fixture(); const first = deferredValue<string>(), corrected = deferredValue<string>();
+  it("ignores a previous pairing's ready response until the current pairing has queried the instance", async () => {
+    const { service, platform, changePairing } = await fixture(); const first = deferredValue<string>(), corrected = deferredValue<string>();
     let correctedReads = 0;
-    platform.status.mockImplementation(async credentials => credentials.apiToken === settings.apiToken ? first.promise : ++correctedReads === 1 ? corrected.promise : "running");
+    platform.status.mockImplementationOnce(async () => first.promise);
+    platform.status.mockImplementation(async () => ++correctedReads === 1 ? corrected.promise : "running");
     const lease = await service.acquire(input()); await until(() => platform.status.mock.calls.length === 1);
-    await service.saveSettings({ ...settings, apiToken: "corrected-token" });
+    changePairing();
     first.resolve("running"); await until(() => correctedReads === 1);
     expect((await service.heartbeat(lease.leaseId)).phase).toBe("starting");
     corrected.resolve("running"); await service.tick();
     expect((await service.heartbeat(lease.leaseId)).phase).toBe("ready");
   });
-  it("does not fail the current attempt when a boot sent with the old token is rejected late", async () => {
-    const { service, platform, setPower } = await fixture(); const oldBoot = deferred();
-    platform.powerOn.mockImplementation(async credentials => {
-      if (credentials.apiToken === settings.apiToken) { await oldBoot.promise; throw new Error("old token rejected"); }
-      setPower("running");
-    });
-    const lease = await service.acquire(input()); await until(() => platform.powerOn.mock.calls.length === 1);
-    await service.saveSettings({ ...settings, apiToken: "corrected-token" }); oldBoot.resolve(); await service.tick();
-    expect(platform.powerOn).toHaveBeenCalledTimes(2);
-    expect(platform.powerOn.mock.calls[1][0].apiToken).toBe("corrected-token");
-    expect((await service.heartbeat(lease.leaseId)).phase).toBe("ready"); expect(platform.powerOff).not.toHaveBeenCalled();
-  });
-  it("does not let an old-token shutdown confirmation clear the corrected operation's pending stop", async () => {
-    const { service, platform } = await fixture();
+  it("does not let an old pairing's shutdown confirmation clear the new operation's pending stop", async () => {
+    const { service, platform, changePairing } = await fixture();
     const lease = await service.acquire(input()); await service.tick();
     const oldStatus = deferredValue<string>(), correctedStatus = deferredValue<string>();
     let correctedReads = 0;
     platform.powerOff.mockResolvedValue(undefined);
-    platform.status.mockImplementation(async credentials => credentials.apiToken === settings.apiToken ? oldStatus.promise : (++correctedReads, correctedStatus.promise));
+    platform.status.mockImplementationOnce(async () => oldStatus.promise);
+    platform.status.mockImplementation(async () => { correctedReads++; return correctedStatus.promise; });
     await service.release(lease.leaseId); await until(() => platform.powerOff.mock.calls.length === 1);
-    await service.saveSettings({ ...settings, apiToken: "corrected-token" }); oldStatus.resolve("shutdown"); await until(() => correctedReads === 1);
+    changePairing(); oldStatus.resolve("shutdown"); await until(() => correctedReads === 1);
     expect((await service.status()).pendingStop).toBe(true);
     correctedStatus.resolve("shutdown"); await service.tick(); expect((await service.status()).pendingStop).toBe(false);
   });
@@ -215,10 +396,10 @@ describe("durable AutoDL task leases", () => {
     expect(JSON.stringify(status)).not.toContain(settings.apiToken);
     await service.check();
     expect(platform.status).toHaveBeenCalledTimes(1); expect(platform.powerOn).not.toHaveBeenCalled(); expect(platform.powerOff).not.toHaveBeenCalled();
-    expect(JSON.parse(await readFile(stateFile(root), "utf8")).settings.apiToken).toBe(settings.apiToken);
+    expect(JSON.parse(await readFile(stateFile(root), "utf8")).settings.apiToken).toBe("");
     if (process.platform !== "win32") expect((await stat(stateFile(root))).mode & 0o777).toBe(0o600);
     await service.saveSettings({ ...settings, apiToken: "" });
-    expect(JSON.parse(await readFile(stateFile(root), "utf8")).settings.apiToken).toBe(settings.apiToken);
+    expect(JSON.parse(await readFile(stateFile(root), "utf8")).settings.apiToken).toBe("");
   });
   it("returns unknown after reloading an idle configuration until the platform has actually been checked", async () => {
     const first = await fixture(); await first.service.check(); expect((await first.service.status()).phase).toBe("off"); await first.service.close();
@@ -369,10 +550,10 @@ describe("durable AutoDL task leases", () => {
     platform.powerOff.mockRejectedValue(new Error("token expired"));
     await service.release(next.leaseId); await service.tick();
     await expect(service.saveSettings({ ...settings, enabled: false })).rejects.toMatchObject({ status: 409 });
-    platform.powerOff.mockImplementation(async credentials => { expect(credentials.apiToken).toBe("replacement-token"); });
+    platform.powerOff.mockImplementation(async credentials => { expect(credentials.apiToken).toBe(""); });
     await service.saveSettings({ ...settings, apiToken: "replacement-token" }); await service.tick();
     expect((await service.status()).pendingStop).toBe(true);
-    expect(platform.powerOff.mock.calls.at(-1)?.[0]).toMatchObject({ apiToken: "replacement-token", instanceUuid: settings.instanceUuid });
+    expect(platform.powerOff.mock.calls.at(-1)?.[0]).toMatchObject({ apiToken: "", instanceUuid: settings.instanceUuid });
     setPower("shutdown"); await service.retryShutdown();
     await service.saveSettings({ ...settings, enabled: false }); expect((await service.status()).settings.enabled).toBe(false);
   });

@@ -36,6 +36,7 @@ import { isRunningHubNativeConnection } from "../runninghub/native-connection";
 import { cleanWorkflowCredentials, detectWorkflowCredentials } from "../workflow/credentials";
 import { reconcilePromptDraftData } from "../prompt-optimization/prompt-drafts";
 import { applyRunningHubWorkflowMetadata, preserveRunningHubWorkflowMetadata, renameRunningHubWorkflow } from "../runninghub/workflow-metadata";
+import { storedRunningHubWorkflows, updateRunningHubWorkflowCatalog } from "../runninghub/workflow-persistence";
 import { retireDirectorCanvas, retireDirectorProject } from "../projects/retired-tools";
 import { museWorkflows } from "../muse/catalog";
 import { prioritizeOutputAssets } from "../workflow/output-policy";
@@ -376,14 +377,19 @@ export const useStore = create<State>((set, get) => ({
       if (!workflow.runninghub?.workflowId || !workflow.runninghub.baseUrl || !workflow.template)
         throw new Error("RunningHub 工作流缺少平台 ID、站点或 API 图。");
       const current = get().runningHubWorkflows;
-      const previous = current.find(item => item.id === workflow.id);
-      const updated = cleanWorkflowCredentials(preserveRunningHubWorkflowMetadata(workflow, previous));
-      const workflows = [...current.filter(w => w.id !== workflow.id), updated];
-      const reconcile = previous && updated.runninghub?.bindingMode === "selected"
+      const localPrevious = current.find(item => item.id === workflow.id);
+      const reconcile = workflow.runninghub.bindingMode === "selected"
         ? (await import("../runninghub/reconcile-bindings")).reconcileRunningHubProjectBindings : undefined;
-      await writeRecord("runninghub-workflows", workflows);
+      let previous = localPrevious;
+      const workflows = await updateRunningHubWorkflowCatalog(current, latest => {
+        const stored = latest.find(item => item.id === workflow.id);
+        previous ??= stored;
+        const updated = cleanWorkflowCredentials(preserveRunningHubWorkflowMetadata(workflow, stored));
+        return [...latest.filter(item => item.id !== workflow.id), updated];
+      });
+      const updated = workflows.find(item => item.id === workflow.id)!;
       set(state => {
-        const project = reconcile ? reconcile(state.project, previous!, updated, state.computeProvider) : state.project;
+        const project = reconcile && previous ? reconcile(state.project, previous, updated, state.computeProvider) : state.project;
         return { runningHubWorkflows: workflows, ...(project !== state.project ? { project, saveState: "待保存" } : {}) };
       });
     });
@@ -392,13 +398,12 @@ export const useStore = create<State>((set, get) => ({
   },
   renameRunningHubWorkflow: (id, name) => {
     const pending = runningHubWorkflowSaving.catch(() => {}).then(async () => {
-      const current = get().runningHubWorkflows;
-      const existing = current.find(workflow => workflow.id === id);
-      if (!existing) throw new Error("此工作流已被移除，请重新选择。");
-      const updated = renameRunningHubWorkflow(existing, name);
-      if (updated === existing) return;
-      const workflows = current.map(workflow => workflow.id === id ? updated : workflow);
-      await writeRecord("runninghub-workflows", workflows);
+      const workflows = await updateRunningHubWorkflowCatalog(get().runningHubWorkflows, latest => {
+        const existing = latest.find(workflow => workflow.id === id);
+        if (!existing) throw new Error("此工作流已被移除，请重新选择。");
+        const updated = renameRunningHubWorkflow(existing, name);
+        return updated === existing ? latest : latest.map(workflow => workflow.id === id ? updated : workflow);
+      });
       set({ runningHubWorkflows: workflows });
     });
     runningHubWorkflowSaving = pending;
@@ -407,15 +412,13 @@ export const useStore = create<State>((set, get) => ({
   updateRunningHubWorkflowMetadata: (id, metadata) => {
     const incoming = { ...metadata };
     const pending = runningHubWorkflowSaving.catch(() => {}).then(async () => {
-      const current = get().runningHubWorkflows;
-      const existing = current.find(workflow => workflow.id === id);
-      // A metadata request may finish after deletion or an edit. Merge into
-      // the latest catalog so it cannot restore a deleted or stale graph.
-      if (!existing) return;
-      const updated = applyRunningHubWorkflowMetadata(existing, incoming);
-      if (updated === existing) return;
-      const workflows = current.map(workflow => workflow.id === id ? updated : workflow);
-      await writeRecord("runninghub-workflows", workflows);
+      const workflows = await updateRunningHubWorkflowCatalog(get().runningHubWorkflows, latest => {
+        const existing = latest.find(workflow => workflow.id === id);
+        // A metadata response arriving after deletion cannot restore the workflow.
+        if (!existing) return latest;
+        const updated = applyRunningHubWorkflowMetadata(existing, incoming);
+        return updated === existing ? latest : latest.map(workflow => workflow.id === id ? updated : workflow);
+      });
       set({ runningHubWorkflows: workflows });
     });
     runningHubWorkflowSaving = pending;
@@ -423,8 +426,8 @@ export const useStore = create<State>((set, get) => ({
   },
   removeRunningHubWorkflow: id => {
     const pending = runningHubWorkflowSaving.catch(() => {}).then(async () => {
-      const workflows = get().runningHubWorkflows.filter(w => w.id !== id);
-      await writeRecord("runninghub-workflows", workflows);
+      const workflows = await updateRunningHubWorkflowCatalog(get().runningHubWorkflows, latest =>
+        latest.some(workflow => workflow.id === id) ? latest.filter(workflow => workflow.id !== id) : latest);
       set({ runningHubWorkflows: workflows });
     });
     runningHubWorkflowSaving = pending;
@@ -942,7 +945,7 @@ export const useStore = create<State>((set, get) => ({
         runningHubConnections: profiles,
         runningHubConnection: profiles[runningHubSite(previousRunningHub.baseUrl)],
         workflowCredentials: workflowCredentials && typeof workflowCredentials === "object" ? workflowCredentials : {},
-        runningHubWorkflows: Array.isArray(runningHubWorkflows) ? runningHubWorkflows.filter(w => w?.runninghub?.workflowId && w?.runninghub?.baseUrl && w.template).map(workflow => cleanWorkflowCredentials(workflow)) : [],
+        runningHubWorkflows: storedRunningHubWorkflows(runningHubWorkflows),
       });
       // A slow or temporarily unavailable directory scan must not keep the
       // whole canvas on the startup screen. Cached/local records are enough to

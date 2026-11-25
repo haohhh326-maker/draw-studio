@@ -18,7 +18,7 @@ it("retains explicitly reviewed bindings when only labels and values change", as
     fresh["2"]._meta = { title: "renamed display label" };
     const review = reviewRunningHubImportBindings(fresh, await readAnalysis(fresh), await saved());
     expect(review.changed).toBe(false);
-    expect(review.promptKey).toBe("2.prompt");
+    expect(review.promptKey).toBe(JSON.stringify(["2", "prompt"]));
     expect(review.media).toMatchObject([{ nodeId: "1", field: "image" }]);
     expect(review.outputs).toEqual([{ nodeId: "3", field: "images", kind: "image" }]);
 });
@@ -235,7 +235,7 @@ it("selects the declared first main prompt when an old app lacks a prompt mappin
     const fresh = runningHubAppGraph(await withRunningHubAppReader(original)), analysis = await readAnalysis(fresh, original);
     analysis.prompts = [{ nodeId: "1", field: "prompt", label: "Main", value: "example" }, { nodeId: "4", field: "negative_prompt", label: "Negative", value: "author negative" }];
     const review = reviewRunningHubImportBindings(fresh, analysis, legacy);
-    expect(review.promptKey).toBe("1.prompt");
+    expect(review.promptKey).toBe(JSON.stringify(["1", "prompt"]));
     expect(review.changed).toBe(true);
     expect(review.warnings.join(" ")).toContain("主提示词");
 });
@@ -246,7 +246,7 @@ it("keeps an explicitly mapped app main prompt instead of replacing it with the 
     legacy.mapping = legacy.mapping.map(mapping => mapping.semantic === "prompt" ? { ...mapping, nodeId: "4", field: "alternate" } : mapping);
     const fresh = runningHubAppGraph(await withRunningHubAppReader(original)), analysis = await readAnalysis(fresh, original);
     analysis.prompts = [{ nodeId: "1", field: "prompt", label: "Main", value: "example" }, { nodeId: "4", field: "alternate", label: "Alternate", value: "my authored prompt" }];
-    expect(reviewRunningHubImportBindings(fresh, analysis, legacy).promptKey).toBe("4.alternate");
+    expect(reviewRunningHubImportBindings(fresh, analysis, legacy).promptKey).toBe(JSON.stringify(["4", "alternate"]));
 });
 it("retains a version 2 app's explicit decision not to bind a main prompt", async () => {
     const original = app(), current = prepareRunningHubApp(await withRunningHubAppReader(original), appOptions).workflow;

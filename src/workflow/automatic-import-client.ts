@@ -1,6 +1,7 @@
 import type { Connection } from "../types";
 import { prepareAutomaticWorkflowImport, type AutomaticImportOptions } from "./automatic-import";
-import { applyImportReview, type ImportBindingReview } from "./import-review";
+import { applyImportReview, restorePublishedImportPrompt, type ImportBindingReview } from "./import-review";
+import { readPublishedWorkflowPrompt } from "./automatic-prompt-binding";
 import { readWorkflowImportSource, saveWorkflowImport, type WorkflowImportSource } from "./import-client";
 import type { PreparedWorkflowImport } from "./import-pipeline";
 import { isLegacyImportFamily } from "./import-category";
@@ -27,7 +28,12 @@ function retainPresentation(prepared: PreparedWorkflowImport, saved: WorkflowImp
       && (refreshLegacyCategory || refreshAutomaticCategory)) continue;
     config[key] = structuredClone(saved.config[key]);
   }
-  const retained = { ...prepared, config };
+  let retained = { ...prepared, config };
+  const savedPrompt = readPublishedWorkflowPrompt(saved.config.importPublishedPrompt);
+  if (savedPrompt && !readPublishedWorkflowPrompt(config.importPublishedPrompt)) {
+    if (prepared.importState.status === "pending") config.importPublishedPrompt = savedPrompt;
+    else retained = restorePublishedImportPrompt(retained, savedPrompt);
+  }
   const review = prepared.config.importBindingReview ?? saved.config.importBindingReview;
   return review && prepared.importState.status === "ready" ? applyImportReview(retained, review as ImportBindingReview) : retained;
 }
@@ -52,7 +58,9 @@ export async function saveAutomaticWorkflowImport(prepared: PreparedWorkflowImpo
 export async function repairSavedWorkflowImport(id: string, connection: Connection, signal: AbortSignal, onProgress?: (message: string) => void, options?: AutomaticImportOptions) {
   const existing = await readWorkflowImportSource(id, signal);
   signal.throwIfAborted();
-  const automatic = await prepareAutomaticWorkflowImport(existing.source, existing.filename, connection, signal, onProgress, options);
+  const publishedPrompt = readPublishedWorkflowPrompt(options?.publishedPrompt) ?? readPublishedWorkflowPrompt(existing.config.importPublishedPrompt);
+  const automatic = await prepareAutomaticWorkflowImport(existing.source, existing.filename, connection, signal, onProgress,
+    publishedPrompt ? { ...options, publishedPrompt } : options);
   signal.throwIfAborted();
   const saved = await saveAutomaticWorkflowImport(automatic.prepared, signal, existing);
   return { ...automatic, ...saved };

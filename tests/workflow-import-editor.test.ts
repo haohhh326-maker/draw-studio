@@ -204,6 +204,47 @@ describe("editor workflow conversion", () => {
     ).toEqual(["1", 0]);
   });
 
+  it("converts legacy display, image concatenation and H.264 widgets without changing links", () => {
+    const source = {
+      nodes: [
+        node(1, "Number", [768], [], [{ type: "INT" }]),
+        node(2, "Display Int (rgthree)", [0, "768"], [input("input", "INT", 1)]),
+        node(3, "ImageLoader", ["source.png"], [], [{ type: "IMAGE" }]),
+        node(4, "ImageConcatMulti", [2, "right", false, null], [input("image_1", "IMAGE", 2), input("image_2", "IMAGE", 3)], [{ type: "IMAGE" }]),
+        node(5, "VHS_VideoCombine", { format: "video/h264-mp4", save_metadata: true }, [input("images", "IMAGE", 4)]),
+      ],
+      links: [link(1, 1, 0, 2, 0, "INT"), link(2, 3, 0, 4, 0, "IMAGE"), link(3, 3, 0, 4, 1, "IMAGE"), link(4, 4, 0, 5, 0, "IMAGE")],
+    };
+    const schema = {
+      ...info,
+      "Display Int (rgthree)": { input: { required: { input: ["INT", { forceInput: true }] } }, output: [], output_node: true },
+      ImageConcatMulti: {
+        input: { required: { inputcount: ["INT"], image_1: ["IMAGE"], direction: [["right", "left"]], match_image_size: ["BOOLEAN"] }, optional: { image_2: ["IMAGE"] } },
+        output: ["IMAGE"],
+      },
+      VHS_VideoCombine: {
+        input: { required: { images: ["IMAGE"], format: [["video/h264-mp4"], { formats: { "video/h264-mp4": [
+          ["save_metadata", "BOOLEAN", { default: true }], ["trim_to_audio", "BOOLEAN", { default: false }],
+        ] } }] } },
+        output: [], output_node: true,
+      },
+    };
+    const { graph } = convertEditorWorkflow(source, schema);
+    expect(graph["2"].inputs).toEqual({ input: ["1", 0] });
+    expect(graph["4"].inputs).toEqual({ inputcount: 2, image_1: ["3", 0], image_2: ["3", 0], direction: "right", match_image_size: false });
+    expect(graph["5"].inputs).toEqual({ images: ["4", 0], format: "video/h264-mp4", save_metadata: true, trim_to_audio: false });
+    expect(source.nodes[3].widgets_values).toEqual([2, "right", false, null]);
+
+    source.nodes[1].widgets_values = [0, "unknown control"];
+    expect(() => convertEditorWorkflow(source, schema)).toThrow("节点 2（Display Int (rgthree)）有 2 个无法识别的额外控件");
+    source.nodes[1].widgets_values = [0, "768"];
+    source.nodes[3].widgets_values = [2, "right", false, "unknown control"];
+    expect(() => convertEditorWorkflow(source, schema)).toThrow("节点 4（ImageConcatMulti）有 1 个无法识别的额外控件");
+    source.nodes[3].widgets_values = [2, "right", false, null];
+    source.nodes[4].widgets_values = { format: "video/h264-mp4", save_metadata: true, trim_to_audio: true };
+    expect(convertEditorWorkflow(source, schema).graph["5"].inputs.trim_to_audio).toBe(true);
+  });
+
   it("rejects missing definitions and unsupported widget sequences with precise errors", () => {
     expect(() =>
       convertEditorWorkflow(

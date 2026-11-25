@@ -114,9 +114,10 @@ describe("RunningHub canvas pipeline", () => {
     expect(fixtures.calls).toEqual(["upload", "submit", "query", "download", "import"]);
   });
 
-  it("uses the saved workflow site's credential when the toolbar is on another RH site", async () => {
+  it.each([rhConnection.baseUrl, "https://runninghub.cn/"])("uses the saved workflow's own site credential (%s)", async baseUrl => {
     const aiConnection = { ...rhConnection, baseUrl: "https://www.runninghub.ai", token: "ai-fixture-key" };
-    useStore.setState({ runningHubConnection: aiConnection, runningHubConnections: { cn: rhConnection, ai: aiConnection } });
+    useStore.setState({ runningHubConnection: aiConnection, runningHubConnections: { cn: rhConnection, ai: aiConnection },
+      runningHubWorkflows: [{ ...definition, runninghub: { ...definition.runninghub!, baseUrl } }] });
     await generate("canvas", "node");
     expect(currentTask()).toMatchObject({ executorType: "runninghub", status: "completed", connection: { baseUrl: rhConnection.baseUrl } });
     expect(vi.mocked(RunningHubClient.prototype.queuePrompt).mock.contexts[0].connection).toMatchObject({ baseUrl: rhConnection.baseUrl, token: rhConnection.token });
@@ -221,8 +222,10 @@ describe("RunningHub canvas pipeline", () => {
     expect(currentNode().data.generationFeedback?.error).toContain("RunningHub API Key");
   });
 
-  it("resumes a saved RH task using the current RH credential even after the visible provider switches to cloud", async () => {
-    const task = interruptedTask(); useStore.getState().createTask(task);
+  it.each([rhConnection.baseUrl, "https://runninghub.cn/"])("resumes a saved RH task using its current site credential (%s)", async baseUrl => {
+    const previous = interruptedTask();
+    const task = { ...previous, connection: { ...previous.connection, baseUrl } };
+    useStore.getState().createTask(task);
     useStore.getState().setComputeProvider("comfyui");
     useStore.setState({ runningHubConnection: { ...rhConnection, token: "updated-rh-fixture-key" } });
     await resumeTask(task.taskId);

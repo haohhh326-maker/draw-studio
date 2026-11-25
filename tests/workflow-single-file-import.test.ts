@@ -129,20 +129,20 @@ describe("single file automatic workflow import", () => {
     expect(prepared.analysis.prompts.map(prompt => prompt.value)).toEqual(["author words", "unrelated words"]);
   });
 
-  it("retains unsupported metadata envelopes pending instead of interpreting them with a different parser", async () => {
-    const source = { make: { class_type: "Painter", inputs: { prompt: "kept words" } },
-      save: { class_type: "SaveImage", inputs: { images: ["make", 0], filename_prefix: "kept" } },
-      extra_pnginfo: { workflow: { nodes: [], links: [] } }, metadata: { author: "myself" } };
-    const { prepared } = await register(source, "with-metadata.json");
+  it("keeps author metadata in the source and retains every API node in the saved execution graph", async () => {
+    const graph = { make: { class_type: "Painter", inputs: { prompt: "kept words" } },
+      save: { class_type: "SaveImage", inputs: { images: ["make", 0], filename_prefix: "kept" } } };
+    const source = { ...graph, extra_pnginfo: { workflow: { nodes: [], links: [] } }, metadata: { author: "myself" } };
+    const { prepared, workflow } = await register(source, "with-metadata.json");
     expect(prepared.format).toBe("api");
-    expect(prepared.importState.status).toBe("pending");
-    expect(prepared.graph).toBeUndefined();
+    expect(prepared.importState.status).toBe("ready");
+    expect(prepared.graph).toEqual(graph);
     expect(prepared.source).toEqual(source);
-    expect(prepared.importState.diagnostics.some(item => item.message.includes("无法识别工作流格式"))).toBe(true);
+    expect(workflow.template).toEqual(graph);
     const metadataOnly = { ...source, extra_pnginfo: { title: "An author-saved API" } };
     const retained = await prepareWorkflowImport(metadataOnly, "api-metadata-only.json");
-    expect(retained.importState.status).toBe("pending");
-    expect(retained.graph).toBeUndefined();
+    expect(retained.importState.status).toBe("ready");
+    expect(retained.graph).toEqual(graph);
     expect(retained.source).toEqual(metadataOnly);
   });
 });
